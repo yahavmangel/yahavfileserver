@@ -21,4 +21,4 @@ def send_text_file(filename, server_ip):
 #     client_socket.connect((server_ip, 65432))
 
 if __name__ == "__main__":
-    send_text_file('test_file.txt', '192.168.1.10')
+    send_text_file('test_file.txt', '192.168.1.224')
