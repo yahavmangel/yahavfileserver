@@ -1,23 +1,12 @@
 import socket
 import os 
-import sys
 import json
-
+import threading
 from difflib import get_close_matches
 
-def start_server():
+def client_handler(conn):
 
     try: 
-
-        # connection setup
-
-        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        server_socket.bind(('0.0.0.0', 12345))  # Bind to all interfaces on port
-        server_socket.listen(1)
-        print("Server is listening...")
-        conn, addr = server_socket.accept() # addr will contain tuple with (ip addr, port)
-        print(f"Connected by {addr}")
 
         # collect connection information
 
@@ -28,7 +17,6 @@ def start_server():
         except socket.herror: 
             print("DNS server offline. Quitting.")
             cancel_flag = 1
-            server_socket.close()
             conn.close()
 
         if not cancel_flag: 
@@ -50,7 +38,6 @@ def start_server():
                 cancel_flag = 1
                 print("Request canceled.")
                 conn.close()
-                server_socket.close()
         
         # handle main requests
 
@@ -94,16 +81,9 @@ def start_server():
         # close connection
 
         conn.close()
-        server_socket.close()
 
     except ConnectionError: 
         print("Connection Error. Exiting.")
-
-def test_dir_scan(dir_name):
-    for root, dirs, files in os.walk(dir_name):
-        print(f"root: {root}")
-        print(f"dirs: {dirs}")
-        print(f"files: {files}")
 
 def similarity_search(dir_name, keyword):
     file_dict = {}
@@ -115,7 +95,18 @@ def similarity_search(dir_name, keyword):
     return [match for match, base_name in file_dict.items() if base_name in matches]
         
 if __name__ == "__main__":
-    while True: 
-        start_server()
-    # test_dir_scan(sys.argv[1])
-    # similarity_search('../server-code', 'receive')
+
+    # connection setup
+
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server_socket.bind(('0.0.0.0', 12345))  # Bind to all interfaces on port
+    server_socket.listen(5)
+
+    print("Server is listening...")
+
+    while True:
+        conn, addr = server_socket.accept()
+        print(f"Connected by {addr}")
+        client_thread = threading.Thread(target=client_handler, args=(conn,))
+        client_thread.start()

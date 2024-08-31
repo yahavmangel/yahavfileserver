@@ -13,6 +13,8 @@ def server_request(server_ip, command, filename):
     
     # connection setup
 
+    cancel_flag = 0 
+    
     try: 
 
         try:
@@ -46,28 +48,18 @@ def server_request(server_ip, command, filename):
                 if user_input == 'n':
                     print("Request canceled.")
                     server_msg = "QUIT" # notify server that you quit
+                    cancel_flag = 1
                     client_socket.sendall(server_msg.encode()) 
                     client_socket.close() # close connection
                 elif user_input == 'y':
                     server_msg = "ACK" # notify server that you acknowledge overwrite
                     client_socket.sendall(server_msg.encode())
                 if not server_msg == "QUIT": 
-                    while True: 
-                        server_resp = client_socket.recv(1024).decode('utf-8')
-                        if (server_resp == 'READY'): 
-                            break
+                    wait_for_server_resp(client_socket, "READY")
 
         # handle server response to request 
-
-        if command == 'REQUEST':
-            while True:
-                server_resp = client_socket.recv(5).decode('utf-8')
-                print(server_resp + '\n')
-                if 'READY' in server_resp:
-                    break
-
-        if server_resp == 'READY': # server indicates operation is ready 
-
+        
+        if not cancel_flag: 
             if command == 'STORE':
                 try: 
                     with open(filename, 'rb') as file:
@@ -81,8 +73,8 @@ def server_request(server_ip, command, filename):
 
             elif command == 'REQUEST':
             
+                wait_for_server_resp(client_socket, "READY")
                 json_list = client_socket.recv(4096).decode('utf-8')
-                print(json_list)
                 try: 
                     options = json.loads(json_list)
                     if (len(options) > 0): 
@@ -122,7 +114,6 @@ def server_request(server_ip, command, filename):
                 except json.decoder.JSONDecodeError:
                     print("No matching results in server. Exiting.")
                     client_socket.close()
-                
 
         if server_msg == 'SERVFAIL': # case of no authorization? 
             print("Error sending file")
@@ -130,5 +121,13 @@ def server_request(server_ip, command, filename):
         
     except ConnectionError: 
         print("Connection Error. Exiting.")
+
+def wait_for_server_resp(client_socket, resp):
+    resp_len = len(resp)
+    while True:
+        server_resp = client_socket.recv(resp_len).decode('utf-8')
+        if resp in server_resp:
+            break
+
 if __name__ == "__main__":
     server_request(sys.argv[1], sys.argv[2], sys.argv[3])
