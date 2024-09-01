@@ -3,7 +3,7 @@ import sys
 import json
 import os
 
-def server_request(server_ip, command, filename):
+def server_request(server_ip, command, filename, target_dir):
 
     # input validation
     
@@ -68,8 +68,8 @@ def server_request(server_ip, command, filename):
         elif command == 'REQUEST':
             wait_for_server_resp(client_socket, "READY")                                    # check that server is ready for request
             try: 
-                json_list = client_socket.recv(4096).decode('utf-8')
                 wait_for_server_resp(client_socket, "OPTIONS")                              # wait for server to return search options
+                json_list = client_socket.recv(4096).decode('utf-8')
                 options = json.loads(json_list)                                             # decode sent options into local array 
                 if (len(options) > 0):                                                      
                     print("Server returned multiple results: \n")
@@ -93,7 +93,7 @@ def server_request(server_ip, command, filename):
                     if int(user_input) > len(options):                                      # chose N/A option    
                         print("Sorry we couldn't find your file :(")
                     else: 
-                        with open(os.path.join('client-code/', (options[int(user_input)-1]).replace('/', '_', 1)), 'wb') as file: 
+                        with open(os.path.join(target_dir, (options[int(user_input)-1]).replace('/', '_', 1)), 'wb') as file: 
                             while True: 
                                 data = client_socket.recv(1024)
                                 if not data:
@@ -120,4 +120,4 @@ def wait_for_server_resp(client_socket, resp):                                  
             break
 
 if __name__ == "__main__":
-    server_request(sys.argv[1], sys.argv[2], sys.argv[3])
+    server_request(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4])

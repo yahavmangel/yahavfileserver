@@ -4,6 +4,13 @@ import json
 import threading
 from difflib import get_close_matches
 
+# global resources
+
+file_lock_dict = {}
+global_dict_lock = threading.Lock()                                                         # lock for locking the file lock dictionary (make it threading safe as well)
+
+# main code 
+
 def client_handler(conn):
 
     try: 
@@ -19,7 +26,7 @@ def client_handler(conn):
 
         client_msg = conn.recv(1024).decode('utf-8')                                        # receive and parse initial client message
         command, filename = client_msg.split('|', 1)
-        client_dir = hostname.replace('.yahavfileserver.home', '', 1)                       # get client's directory name in fileserver 
+        client_dir = os.path.join('../files', hostname.split('.')[0])                       # get client's directory name in fileserver 
 
         # check and handle file overwrite case
 
@@ -38,6 +45,10 @@ def client_handler(conn):
         # handle main requests
 
         if command == 'STORE':
+
+            file_lock = get_file_lock(filename)                                             # synchronization: prevent w/w conflicts to same file 
+            file_lock.acquire()
+
             conn.sendall(b'READY')                                                          # eventually, do some authentication before this. But for now, always indicate ready. 
             os.makedirs(client_dir, exist_ok=True)                                          # make directory for new host (or just don't do anything if already exists)
             with open(os.path.join(client_dir, os.path.basename(filename)), 'wb') as file:  # join file name with newly made directory 
@@ -53,25 +64,31 @@ def client_handler(conn):
                     data_flag = 1
                 if data_flag: 
                     print("File stored successfully")
+
+                file_lock.release()
                     
         elif command == 'REQUEST':
             conn.sendall(b'READY')
-            json_list = json.dumps(similarity_search("../server-code", filename))           # call search algorithm and send result to client
+            json_list = json.dumps(similarity_search("../files/", filename))                # call search algorithm and send result to client
             if not json.loads(json_list):                                                   # list is empty
                 print("Error: search unsuccessful. Closing.")
-            else:     
-                conn.sendall(json_list.encode('utf-8'))                           
-                conn.sendall(b'OPTIONS')                                                    # indicate to client that options are ready 
+            else: 
+                conn.sendall(b'OPTIONS')    
+                conn.sendall(json_list.encode('utf-8'))
                 client_msg = conn.recv(1024).decode('utf-8')                                # receive back client's number choice, which is index into list
                 options = json.loads(json_list) 
                 if int(client_msg) > len(options):                                          # client chose N/A option
                     print("Error: search unsuccessful. Closing.")
                 else: 
                     target_file = options[int(client_msg)-1]
-                    with open(target_file, 'rb') as file: 
+                    file_lock = get_file_lock(target_file)                                  # synchronization: prevent r/w conflicts on the same file
+                    file_lock.acquire()
+                    with open(os.path.join('../files', target_file), 'rb') as file: 
                         data = file.read()                                                  # send target file to client
                         conn.sendall(data)
                         print("File sent successfully")
+
+                    file_lock.release()
 
         # close connection
 
@@ -80,15 +97,25 @@ def client_handler(conn):
     except ConnectionError: 
         print("Connection Error. Exiting.")
 
+# helper functions
+
 def similarity_search(dir_name, keyword):
     file_dict = {}
     for root, dirs, files in os.walk(dir_name):
         for file in files: 
-            filepath = os.path.join(root.replace('../server-code/', '', 1), file)
+            filepath = os.path.join(root.replace(dir_name, '', 1), file)
             file_dict.update({filepath:os.path.basename(filepath)})
     matches = get_close_matches(keyword, list(file_dict.values()), n=10, cutoff=0.5)
     return [match for match, base_name in file_dict.items() if base_name in matches]
         
+def get_file_lock(filename):
+    with global_dict_lock:
+        if filename not in file_lock_dict:
+            file_lock_dict[filename] = threading.Lock()
+        return file_lock_dict[filename]
+
+# main loop 
+
 if __name__ == "__main__":
 
     # connection setup
