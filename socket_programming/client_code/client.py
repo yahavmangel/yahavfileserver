@@ -38,7 +38,6 @@ def server_request(server_ip, command, filename, target_dir):
             # handle file overwriting case
 
             if server_resp == 'OVERWRITE':                                                  # detect overwriting
-                print("hi")
                 while True:
                     user_input = input("File already exists. Overwrite? [y/n] ")            # prompt user on action
                     if user_input == 'n' or user_input == 'y':
@@ -146,7 +145,7 @@ def server_request(server_ip, command, filename, target_dir):
                                     extraction_dir += f' ({i})'
                                     break
                             os.makedirs(extraction_dir, exist_ok=True)
-                            with open('temp_zip_file.zip', 'wb') as temp_zip:               # receive zip file binary. This opens a temp zip file.
+                            with open(filename[:-1].replace('/', '_', 1) + '_temp.zip', 'wb') as temp_zip:               # receive zip file binary. This opens a temp zip file.
                                 while True: 
                                     zip_data = client_socket.recv(4096)
                                     if not zip_data:
@@ -154,10 +153,10 @@ def server_request(server_ip, command, filename, target_dir):
                                     temp_zip.write(zip_data)
                                 temp_zip.flush()                                            # weird solution that fixed 'not a zip file' error for me
                                 os.fsync(temp_zip.fileno())
-                                with zipfile.ZipFile('temp_zip_file.zip', 'r') as zip_file: # use zipfile API to unzip requested directory 
+                                with zipfile.ZipFile(filename[:-1].replace('/', '_', 1) + '_temp.zip', 'r') as zip_file: # use zipfile API to unzip requested directory 
                                     zip_file.extractall(path=extraction_dir)
                                     print("Directory unzipped successfully")
-                            os.remove('temp_zip_file.zip')                                  # remove temp zip file. 
+                            os.remove(filename[:-1].replace('/', '_', 1) + '_temp.zip')                                  # remove temp zip file. 
 
                 else: 
                     print("Error: File not found in server. Exiting.")

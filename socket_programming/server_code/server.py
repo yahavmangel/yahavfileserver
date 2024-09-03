@@ -47,7 +47,7 @@ def client_handler(conn):
 
         if command == 'STORE':
 
-            conn.sendall(b'READY')
+            conn.sendall(b'READY')                                                                  # eventually, do some authentication before this. But for now, always indicate ready. 
 
             while True: 
                 client_msg = conn.recv(1024).decode('utf-8')
@@ -56,7 +56,7 @@ def client_handler(conn):
             
             if client_msg == 'STOREFILE':
                 file_lock = get_file_lock(filename)                                                 # synchronization: prevent w/w conflicts to same file 
-                with file_lock:                                                    # eventually, do some authentication before this. But for now, always indicate ready. 
+                with file_lock:                                                    
                     os.makedirs(client_dir, exist_ok=True)                                          # make directory for new host (or just don't do anything if already exists)
                     with open(os.path.join(client_dir, os.path.basename(filename)), 'wb') as file:  # join file name with newly made directory 
                         data_flag = 0
@@ -71,21 +71,23 @@ def client_handler(conn):
                             data_flag = 1
                         if data_flag: 
                             print("File stored successfully")
-            elif client_msg == 'STOREDIR':
-                extraction_dir = client_dir
-                os.makedirs(extraction_dir, exist_ok=True)
-                with open('temp_zip_file.zip', 'wb') as temp_zip:               # receive zip file binary. This opens a temp zip file.
-                    while True: 
-                        zip_data = conn.recv(4096)
-                        if not zip_data:
-                            break
-                        temp_zip.write(zip_data)
-                    temp_zip.flush()                                            # weird solution that fixed 'not a zip file' error for me
-                    os.fsync(temp_zip.fileno())
-                    with zipfile.ZipFile('temp_zip_file.zip', 'r') as zip_file: # use zipfile API to unzip requested directory 
-                        zip_file.extractall(path=extraction_dir)
-                        print("Directory unzipped successfully")
-                os.remove('temp_zip_file.zip')                                  # remove temp zip file. 
+            elif client_msg == 'STOREDIR':                                          
+                dir_lock = get_file_lock(filename) 
+                with dir_lock:                                                                      # synchronization: prevent w/w conflicts to same directory 
+                    extraction_dir = client_dir
+                    os.makedirs(extraction_dir, exist_ok=True)
+                    with open(filename[:-1].replace('/', '_', 1) + '_temp.zip', 'wb') as temp_zip:               # receive zip file binary. This opens a temp zip file.
+                        while True: 
+                            zip_data = conn.recv(4096)
+                            if not zip_data:
+                                break
+                            temp_zip.write(zip_data)
+                        temp_zip.flush()                                            # weird solution that fixed 'not a zip file' error for me
+                        os.fsync(temp_zip.fileno())
+                        with zipfile.ZipFile(filename[:-1].replace('/', '_', 1) + '_temp.zip', 'r') as zip_file: # use zipfile API to unzip requested directory 
+                            zip_file.extractall(path=extraction_dir)
+                            print("Directory unzipped successfully")
+                    os.remove(filename[:-1].replace('/', '_', 1) + '_temp.zip')                                  # remove temp zip file. 
 
                     
         elif command == 'REQUEST':
@@ -116,22 +118,24 @@ def client_handler(conn):
                     
                     # directory request 
                     
-                    elif os.path.isdir(os.path.join('../files', target_file[:-1])):             
-                        with zipfile.ZipFile(os.path.join('../files', target_file[:-1] + '.zip'), 'w') as zip:              # use zipfile API to zip requested directory. This opens a temp zip file
-                            for root, dirs, files in os.walk(os.path.join('../files', target_file[:-1])):
-                                for file in files:                                                                          # add every file to zip archive
-                                    filepath = os.path.join(root, file)
-                                    arcname = os.path.relpath(filepath, start=os.path.join('../files', target_file[:-1]))   # use relative path to maintain correct directory structure
-                                    zip.write(filepath, arcname=arcname)
-                                for dir in dirs:                                                                            # add every subdirectory to zip archive
-                                    dirpath = os.path.join(root, dir)
-                                    arcname = os.path.relpath(dirpath, start=os.path.join('../files', target_file[:-1]))    # use relative path to maintain correct directory structure
-                                    zip.write(dirpath, arcname=arcname)
-                        with open(os.path.join('../files', target_file[:-1] + '.zip'), 'rb') as zip_file:                   # open file in binary mode to send it over socket
-                            data = zip_file.read()
-                            conn.sendall(data)
-                            print("Zipped directory sent successfully")
-                        os.remove(os.path.join('../files', target_file[:-1] + '.zip'))                                      # remove temporary file
+                    elif os.path.isdir(os.path.join('../files', target_file[:-1])):     
+                        dir_lock = get_file_lock(target_file[:-1])
+                        with dir_lock:                                                                                          # synchronization: prevent r/w conflicts on the same file
+                            with zipfile.ZipFile(os.path.join('../files', target_file[:-1] + '.zip'), 'w') as zip:              # use zipfile API to zip requested directory. This opens a temp zip file
+                                for root, dirs, files in os.walk(os.path.join('../files', target_file[:-1])):
+                                    for file in files:                                                                          # add every file to zip archive
+                                        filepath = os.path.join(root, file)
+                                        arcname = os.path.relpath(filepath, start=os.path.join('../files', target_file[:-1]))   # use relative path to maintain correct directory structure
+                                        zip.write(filepath, arcname=arcname)
+                                    for dir in dirs:                                                                            # add every subdirectory to zip archive
+                                        dirpath = os.path.join(root, dir)
+                                        arcname = os.path.relpath(dirpath, start=os.path.join('../files', target_file[:-1]))    # use relative path to maintain correct directory structure
+                                        zip.write(dirpath, arcname=arcname)
+                            with open(os.path.join('../files', target_file[:-1] + '.zip'), 'rb') as zip_file:                   # open file in binary mode to send it over socket
+                                data = zip_file.read()
+                                conn.sendall(data)
+                                print("Zipped directory sent successfully")
+                            os.remove(os.path.join('../files', target_file[:-1] + '.zip'))                                      # remove temporary file
 
         # close connection
 
