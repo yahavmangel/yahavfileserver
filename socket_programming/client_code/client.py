@@ -2,6 +2,7 @@ import socket
 import sys
 import json
 import os
+import zipfile
 
 def server_request(server_ip, command, filename, target_dir):
 
@@ -37,6 +38,7 @@ def server_request(server_ip, command, filename, target_dir):
             # handle file overwriting case
 
             if server_resp == 'OVERWRITE':                                                  # detect overwriting
+                print("hi")
                 while True:
                     user_input = input("File already exists. Overwrite? [y/n] ")            # prompt user on action
                     if user_input == 'n' or user_input == 'y':
@@ -57,13 +59,34 @@ def server_request(server_ip, command, filename, target_dir):
         # handle server response to request 
 
         if command == 'STORE':
-            try: 
+            if os.path.isfile(filename):
+                server_msg = 'STOREFILE'
+                client_socket.sendall(server_msg.encode()) 
                 with open(filename, 'rb') as file:
                     data = file.read()                                                      # Read the whole file
                     client_socket.sendall(data)                                             # Send all the data
                     print("File sent successfully")
-            except FileNotFoundError:
+            elif os.path.isdir(filename):
+                server_msg = 'STOREDIR'
+                client_socket.sendall(server_msg.encode()) 
+                with zipfile.ZipFile(filename + '.zip', 'w') as temp_zip:
+                    for root, dirs, files in os.walk(filename):
+                        for file in files:                                                                                  # add every file to zip archive
+                            filepath = os.path.join(root, file)
+                            arcname = os.path.relpath(filepath, start=os.path.join(os.path.join(target_dir, filename)))     # use relative path to maintain correct directory structure
+                            temp_zip.write(filepath, arcname=arcname)
+                        for dir in dirs:                                                                                    # add every subdirectory to zip archive
+                            dirpath = os.path.join(root, dir)
+                            arcname = os.path.relpath(dirpath, start=os.path.join(os.path.join(target_dir, filename)))      # use relative path to maintain correct directory structure
+                            temp_zip.write(dirpath, arcname=arcname)
+                with open(filename + '.zip', 'rb') as zip: 
+                    data = zip.read()
+                    client_socket.sendall(data)
+                    print("Zipped directory sent successfully")
+                os.remove(filename + '.zip')  
+            else: 
                 print("Error: the file you requested to store does not exist. Exiting.")    # case of invalid file name
+                
 
         elif command == 'REQUEST':
             wait_for_server_resp(client_socket, "READY")                                    # check that server is ready for request
@@ -93,13 +116,49 @@ def server_request(server_ip, command, filename, target_dir):
                     if int(user_input) > len(options):                                      # chose N/A option    
                         print("Sorry we couldn't find your file :(")
                     else: 
-                        with open(os.path.join(target_dir, (options[int(user_input)-1]).replace('/', '_', 1)), 'wb') as file: 
-                            while True: 
-                                data = client_socket.recv(1024)
-                                if not data:
+
+                        # handle file request response
+
+                        if not options[int(user_input)-1][-1] == '/':                       # use '/' character appended by server to distinguish between files and dirs. If there is a '/', it is a dir. 
+                            new_filepath = os.path.join(target_dir, (os.path.basename(options[int(user_input)-1])))
+                            if os.path.exists(new_filepath):                                # check for potential overwrite. If so, add (1), (2), etc. to indicate copy number.
+                                for i in range(1, 1000000):                                 # bad implementation, but ain't nobody gonna make more than 1 million copies of a file.. right?????
+                                    if os.path.exists(new_filepath.split('.')[0] + f' ({i})' + '.' + new_filepath.split('.')[1]):
+                                        continue
+                                    new_filepath = new_filepath.split('.')[0] + f' ({i})' + '.' + new_filepath.split('.')[1]
                                     break
-                                file.write(data)
-                            print("File received successfully")
+                            with open(new_filepath, 'wb') as file:                          # receive requested file data 
+                                while True: 
+                                    data = client_socket.recv(1024)
+                                    if not data:
+                                        break
+                                    file.write(data)
+                                print("File received successfully")
+
+                        # handle directory request response 
+
+                        else: 
+                            extraction_dir = os.path.join(target_dir, os.path.basename(options[int(user_input)-1][:-1]))
+                            if os.path.exists(extraction_dir):                              # check for potential overwrite. If so, add (1), (2), etc. to indicate copy number.
+                                for i in range(1, 1000000):                                 # bad implementation, but ain't nobody gonna make more than 1 million copies of a file.. right?????
+                                    if os.path.exists(extraction_dir + f' ({i})'):
+                                        continue
+                                    extraction_dir += f' ({i})'
+                                    break
+                            os.makedirs(extraction_dir, exist_ok=True)
+                            with open('temp_zip_file.zip', 'wb') as temp_zip:               # receive zip file binary. This opens a temp zip file.
+                                while True: 
+                                    zip_data = client_socket.recv(4096)
+                                    if not zip_data:
+                                        break
+                                    temp_zip.write(zip_data)
+                                temp_zip.flush()                                            # weird solution that fixed 'not a zip file' error for me
+                                os.fsync(temp_zip.fileno())
+                                with zipfile.ZipFile('temp_zip_file.zip', 'r') as zip_file: # use zipfile API to unzip requested directory 
+                                    zip_file.extractall(path=extraction_dir)
+                                    print("Directory unzipped successfully")
+                            os.remove('temp_zip_file.zip')                                  # remove temp zip file. 
+
                 else: 
                     print("Error: File not found in server. Exiting.")
             except json.decoder.JSONDecodeError:
