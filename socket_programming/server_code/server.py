@@ -31,7 +31,7 @@ def client_handler(conn):
 
         # check and handle file overwrite case
 
-        if command == 'STORE' and os.path.exists(os.path.join(client_dir, filename.split('/')[1])): 
+        if command == 'STORE' and os.path.exists(os.path.join(client_dir, filename.split('/')[-1])): 
             conn.sendall(b'OVERWRITE')                                                      # notify client of potential overwrite
             client_msg = conn.recv(1024).decode('utf-8')                                    # receive client response to overwrite
             while True: 
@@ -55,7 +55,9 @@ def client_handler(conn):
                     break
             
             if client_msg == 'STOREFILE':
-                file_lock = get_file_lock(filename)                                                 # synchronization: prevent w/w conflicts to same file 
+                file_lock = get_file_lock(os.path.join(hostname.split('.')[0], os.path.basename(filename)))                                                # synchronization: prevent w/w conflicts to same file 
+                print(f'{os.path.join(hostname.split('.')[0], os.path.basename(filename))} lock acquired')
+
                 with file_lock:                                                    
                     os.makedirs(client_dir, exist_ok=True)                                          # make directory for new host (or just don't do anything if already exists)
                     with open(os.path.join(client_dir, os.path.basename(filename)), 'wb') as file:  # join file name with newly made directory 
@@ -72,7 +74,8 @@ def client_handler(conn):
                         if data_flag: 
                             print("File stored successfully")
             elif client_msg == 'STOREDIR':                                          
-                dir_lock = get_file_lock(filename) 
+                dir_lock = get_file_lock(os.path.join(hostname.split('.')[0], filename[:-1].split('/')[-1])) # don't even ask what this is
+                print(f'{os.path.join(hostname.split('.')[0], filename[:-1].split('/')[-1])} lock acquired')
                 with dir_lock:                                                                      # synchronization: prevent w/w conflicts to same directory 
                     extraction_dir = client_dir
                     os.makedirs(extraction_dir, exist_ok=True)
@@ -110,6 +113,7 @@ def client_handler(conn):
 
                     if os.path.isfile(os.path.join('../files', target_file)):
                         file_lock = get_file_lock(target_file)                                  # synchronization: prevent r/w conflicts on the same file
+                        print(f'{target_file} lock acquired')
                         with file_lock: 
                             with open(os.path.join('../files', target_file), 'rb') as file: 
                                 data = file.read()                                              # send target file to client
@@ -120,6 +124,7 @@ def client_handler(conn):
                     
                     elif os.path.isdir(os.path.join('../files', target_file[:-1])):     
                         dir_lock = get_file_lock(target_file[:-1])
+                        print(f'{target_file[:-1]} lock acquired')
                         with dir_lock:                                                                                          # synchronization: prevent r/w conflicts on the same file
                             with zipfile.ZipFile(os.path.join('../files', target_file[:-1] + '.zip'), 'w') as zip:              # use zipfile API to zip requested directory. This opens a temp zip file
                                 for root, dirs, files in os.walk(os.path.join('../files', target_file[:-1])):
