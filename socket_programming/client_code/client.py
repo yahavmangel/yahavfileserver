@@ -9,8 +9,8 @@ import configparser
 
 config = configparser.ConfigParser()
 config.read('client-code/config.ini')
-server_ip = config['server']['server_ip']
-port = int(config['server']['port'])
+server_ip = config['client']['server_ip']
+port = int(config['client']['port'])
 
 command_table = { 
 
@@ -26,8 +26,10 @@ command_table = {
     'OVERWRITE': 'OVERWRITE',
     'QUIT': 'QUIT',
     'ACK': 'ACK',
-    'STOREFILE':'STOREFILE',
-    'STOREDIR':'STOREDIR'
+    'STOREFILE': 'STOREFILE',
+    'STOREDIR': 'STOREDIR',
+    'AUTH': 'AUTH',
+    'AUTHFAIL': 'AUTHFAIL'
 }
 
 # magic numbers
@@ -66,14 +68,30 @@ def server_request(command, filename, target_dir):
 
         if command == 'STORE':
 
-            status = handle_overwrite(client_socket)
-            if status == 0:
+            while True: 
+                server_resp = client_socket.recv(4).decode('utf-8') 
+                if ('AUTH' in server_resp): 
+                    break
+            if server_resp == 'AUTH':
+                status = handle_overwrite(client_socket)
+                if status == 0:
+                    return
+                store_handler(client_socket, filename, target_dir)
+            elif server_resp == 'AUTHFAIL':
+                print("Permission denied. Exiting.")
                 return
-            store_handler(client_socket, filename, target_dir)
 
         elif command == 'REQUEST':
 
-            request_handler(client_socket, target_dir, filename)
+            while True: 
+                server_resp = client_socket.recv(BUF_SIZE_SMALL).decode('utf-8')                      # collect initial response from server 
+                if (server_resp == 'AUTH') or (server_resp == 'AUTHFAIL'): 
+                    break
+            if server_resp == 'AUTH':
+                request_handler(client_socket, filename, target_dir)
+            elif server_resp == 'AUTHFAIL':
+                print("Permission denied. Exiting.")
+                return
     
         #close connection
 
@@ -141,7 +159,7 @@ def store_handler(client_socket, filename, target_dir):
     else: 
         print("Error: the file or directory you requested to store does not exist. Exiting.")    # case of invalid file name
 
-def request_handler(client_socket, target_dir, filename):
+def request_handler(client_socket, filename, target_dir):
 
     wait_for_server_resp(client_socket, "READY")                                    # check that server is ready for request
     try: 

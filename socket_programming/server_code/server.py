@@ -5,12 +5,17 @@ import threading
 import zipfile
 import configparser
 from difflib import get_close_matches
+from ldap3 import Server, Connection, ALL, SASL, GSSAPI
 
 # important metadata
 
 config = configparser.ConfigParser()
 config.read('config.ini')
 port = int(config['server']['port'])
+port2 = int(config['server']['port2'])
+domain_controller = config['server']['domain_controller']
+domain_controller_ip = config['server']['domain_controller_ip']
+dc_array = domain_controller.split('.')[1:]
 
 command_table = { 
 
@@ -26,8 +31,10 @@ command_table = {
     'OVERWRITE': 'OVERWRITE',
     'QUIT': 'QUIT',
     'ACK': 'ACK',
-    'STOREFILE':'STOREFILE',
-    'STOREDIR':'STOREDIR'
+    'STOREFILE': 'STOREFILE',
+    'STOREDIR': 'STOREDIR',
+    'AUTH': 'AUTH',
+    'AUTHFAIL': 'AUTHFAIL'
 }
 
 # magic numbers
@@ -62,29 +69,33 @@ def client_handler(conn):
         client_name = hostname.split('.')[0]
         client_dir = os.path.join('../files', client_name)                       # get client's directory name in fileserver 
 
-        # check for overwrite
-
-        if command == 'STORE' and os.path.exists(os.path.join(client_dir, filename.split('/')[-1])): 
-            conn.sendall(command_table['OVERWRITE'].encode())                                                      # notify client of potential overwrite
-            client_msg = conn.recv(BUF_SIZE_SMALL).decode('utf-8')                                    # receive client response to overwrite
-            while True: 
-                if ((client_msg == 'ACK') or (client_msg == 'QUIT')):                       # wait for client response to overwrite
-                    break
-
-        if client_msg == 'QUIT':                                                            # client decided to abort to avoid overwrite
-            print("Request canceled.")
-            conn.close()
-            return 
+        
         
         # handle main requests
 
         if command == 'STORE':
 
-            handle_store(conn, filename, client_dir, client_name)
+            if check_ldap_auth(client_name, 'write'):
+                print("Authorized.")
+                conn.sendall(command_table['AUTH'].encode())
+                handle_store(conn, filename, client_dir, client_name)
+            else: 
+                print("Error: client not authorized to make request. Exiting.")
+                conn.sendall(command_table['AUTHFAIL'].encode())
+                conn.close()
+                return
                     
         elif command == 'REQUEST':
 
-            handle_request(conn, filename)
+            if check_ldap_auth(client_name, 'read'):
+                print("Authorized.")
+                conn.sendall(command_table['AUTH'].encode())
+                handle_request(conn, filename)
+            else:
+                print("Error: client not authorized to make request. Exiting.")
+                conn.sendall(command_table['AUTHFAIL'].encode())
+                conn.close()
+                return
 
         # close connection
 
@@ -95,6 +106,22 @@ def client_handler(conn):
 
 
 def handle_store(conn, filename, client_dir, client_name):
+
+    # check for overwrite
+
+    if os.path.exists(os.path.join(client_dir, filename.split('/')[-1])): 
+        conn.sendall(command_table['OVERWRITE'].encode())                                                      # notify client of potential overwrite
+        client_msg = conn.recv(BUF_SIZE_SMALL).decode('utf-8')                                    # receive client response to overwrite
+        while True: 
+            if ((client_msg == 'ACK') or (client_msg == 'QUIT')):                       # wait for client response to overwrite
+                break
+
+    if client_msg == 'QUIT':                                                            # client decided to abort to avoid overwrite
+        print("Request canceled.")
+        conn.close()
+        return 
+
+    # initiate request 
 
     conn.sendall(command_table['READY'].encode())                                                                  # eventually, do some authentication before this. But for now, always indicate ready. 
 
@@ -213,12 +240,86 @@ def get_file_lock(filename):
         if filename not in file_lock_dict:
             file_lock_dict[filename] = threading.Lock()
         return file_lock_dict[filename]
+    
+def check_ldap_auth(username, perm):
+
+    print(f'verifying {username} permissions...')
+    domain_dn = construct_dn('')
+    # Configure LDAP server details
+    ldap_server = f'ldap://{domain_controller}'  # Replace with your DC's address
+
+    # Connect to the LDAP server using GSSAPI (Kerberos) authentication
+    server = Server(ldap_server, get_info=ALL)
+    ldap_conn = Connection(server, authentication=SASL, sasl_mechanism=GSSAPI)
+
+    # try: 
+        
+    ldap_conn.bind()
+
+    # Query #1: get DN of target user
+    ldap_conn.search(search_base=domain_dn, search_filter=f'(|(&(objectClass=user)(cn={username}))(&(objectClass=computer)(cn={username})))', attributes=['distinguishedName', 'nTSecurityDescriptor'])
+    if ldap_conn.entries: 
+        user_dn = ldap_conn.entries[0].distinguishedName.value
+        bin_sd = ldap_conn.entries[0].ntSecurityDescriptor.raw_values[0] # get binary data of security descriptor 
+        
+        # Query #2: get all groups that user is member of
+        ldap_conn.search(search_base=domain_dn, search_filter=f'(&(objectCategory=group)(member={user_dn}))', attributes=['cn', 'groupType', 'objectSid'])
+        
+        if ldap_conn.entries:
+            groups_to_check = [] # list of SIDs to be sent to DC for permission checking
+            for entry in ldap_conn.entries: 
+                if((entry.groupType.value & 0x80000000) != 0): # check if security group
+                    print(f'{username} is member of the {entry.cn.value} security group')
+                    groups_to_check.append(entry.objectSid.value) # add SID of security group to list
+            return bool(parse_sd(bin_sd, perm, groups_to_check)) # return integer containing permissions from the security desciptor's ACE. 
+    else: return False
+
+def parse_sd(security_desc, target_permission, sid_list):
+
+    # set up socket connection with DC
+    
+    dc_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    dc_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    dc_socket.connect((domain_controller_ip, port2))
+
+    delimiter = b'\x1F'
+
+    # Convert binary data to bytes and combine everything into a single message with the control character delimiter
+    server_msg = delimiter.join([
+        security_desc,
+        target_permission.encode('utf-8'),
+        json.dumps(sid_list).encode('utf-8')
+    ])
+     
+    dc_socket.sendall(server_msg) # send security descriptor raw binary to DC
+    dc_socket.shutdown(socket.SHUT_WR)
+    wait_for_server_resp(dc_socket, command_table['AUTH'])
+    resp = int(dc_socket.recv(1).decode('utf-8')) # DC will return a 1 or 0, 1 is authorized, 0 is not. 
+    dc_socket.close()
+    return resp
+
+def construct_dn(basename):
+
+    for i in range(0, len(dc_array)):
+        basename += ('DC=' + dc_array[i])
+        if i < len(dc_array) - 1:
+            basename += ','
+    return basename
+
+def wait_for_server_resp(dc_socket, resp):                                              # helper function that polls for specific server response
+    resp_len = len(resp)
+    while True:
+        server_resp = dc_socket.recv(resp_len).decode('utf-8')
+        if resp in server_resp and resp in command_table.keys():
+            break
 
 # main loop 
 
 if __name__ == "__main__":
 
-    # connection setup
+    # print(f'user Vinit Gupta has write access: {check_ldap_auth('vinit gupta', 'write')}.')
+
+    # # connection setup
 
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
