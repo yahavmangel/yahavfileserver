@@ -28,14 +28,15 @@ command_table = {
     'ACK': 'ACK',
     'STOREFILE': 'STOREFILE',
     'STOREDIR': 'STOREDIR',
-    'AUTH': 'AUTH',
-    'AUTHFAIL': 'AUTHFAIL'
+    'AUTHSUCCESS': 'AUTHS',
+    'AUTHFAIL': 'AUTHF'
 }
 
 # magic numbers
 
 NUM_CLIENT_COMMANDS = 2
 NUM_INTERNAL_COMMANDS = 7
+AUTH_RESP_LEN = 5
 BUF_SIZE_SMALL = 1024
 BUF_SIZE_LARGE = 4096
 FILE_COPY_LIMIT = 1000000
@@ -69,27 +70,29 @@ def server_request(command, filename, target_dir):
         if command == 'STORE':
 
             while True: 
-                server_resp = client_socket.recv(4).decode('utf-8') 
-                if ('AUTH' in server_resp): 
+                server_resp = client_socket.recv(AUTH_RESP_LEN).decode('utf-8')             # wait for server authentication response
+                if (server_resp[:-1] == 'AUTH'):                                            # could be either auth success or fail 
+                    print(server_resp)
                     break
-            if server_resp == 'AUTH':
+            if server_resp == 'AUTHS':                                                      # auth success: handle request 
                 status = handle_overwrite(client_socket)
-                if status == 0:
+                if status == 0:                                                             # chose to quit after overwrite
                     return
-                store_handler(client_socket, filename, target_dir)
-            elif server_resp == 'AUTHFAIL':
+                elif status == 1:                                                           # either no overwrite, or chose to proceed
+                    store_handler(client_socket, filename, target_dir)                       
+            elif server_resp == 'AUTHF':                                                    # auth fail: reject request
                 print("Permission denied. Exiting.")
                 return
 
         elif command == 'REQUEST':
 
             while True: 
-                server_resp = client_socket.recv(BUF_SIZE_SMALL).decode('utf-8')                      # collect initial response from server 
-                if (server_resp == 'AUTH') or (server_resp == 'AUTHFAIL'): 
+                server_resp = client_socket.recv(AUTH_RESP_LEN).decode('utf-8')             # wait for server authentication response
+                if ('AUTH' in server_resp):
                     break
-            if server_resp == 'AUTH':
+            if server_resp == 'AUTHS':                                                      # auth success: handle request 
                 request_handler(client_socket, filename, target_dir)
-            elif server_resp == 'AUTHFAIL':
+            elif server_resp == 'AUTHF':                                                    # auth fail: rejct request 
                 print("Permission denied. Exiting.")
                 return
     
@@ -103,31 +106,31 @@ def server_request(command, filename, target_dir):
 def handle_overwrite(client_socket):
 
     while True: 
-        server_resp = client_socket.recv(BUF_SIZE_SMALL).decode('utf-8')                      # collect initial response from server 
+        server_resp = client_socket.recv(BUF_SIZE_SMALL).decode('utf-8')                    # collect initial response from server 
         if (server_resp == 'OVERWRITE') or (server_resp == 'READY'): 
             break
     
     # handle file overwriting case
 
-    if server_resp == 'OVERWRITE':                                                  # detect overwriting
+    if server_resp == 'OVERWRITE':                                                          # detect overwriting
         while True:
-            user_input = input("File already exists. Overwrite? [y/n] ")            # prompt user on action
+            user_input = input("File already exists. Overwrite? [y/n] ")                    # prompt user on action
             if user_input == 'n' or user_input == 'y':
                 break
             else:
                 print ("Invalid input, try again\n")
         if user_input == 'n':
             print("Request canceled.")
-            server_msg = "QUIT"                                                     # notify server that you quit
+            server_msg = "QUIT"                                                             # notify server that you quit
             client_socket.sendall(server_msg.encode()) 
             client_socket.close()                                                   
             return 0
         elif user_input == 'y':
-            server_msg = "ACK"                                                      # notify server that you acknowledge overwrite
+            server_msg = "ACK"                                                              # notify server that you acknowledge overwrite
             client_socket.sendall(server_msg.encode())
-            wait_for_server_resp(client_socket, "READY")                            # check that server is ready AFTER overwrite
+            wait_for_server_resp(client_socket, "READY")                                    # check that server is ready AFTER overwrite
             return 1
-
+    else: return 1
 
 def store_handler(client_socket, filename, target_dir):
 
@@ -135,9 +138,9 @@ def store_handler(client_socket, filename, target_dir):
         server_msg = 'STOREFILE'
         client_socket.sendall(server_msg.encode()) 
         with open(filename, 'rb') as file:
-            data = file.read()                                                      # Read the whole file
-            client_socket.sendall(data)                                             # Send all the data
-            print("File sent successfully")
+            data = file.read()                                                              # Read the whole file
+            client_socket.sendall(data)                                                     # Send all the data
+            print("File sent successfully") 
     elif os.path.isdir(filename):
         server_msg = 'STOREDIR'
         client_socket.sendall(server_msg.encode()) 
@@ -194,7 +197,7 @@ def request_handler(client_socket, filename, target_dir):
                 if not options[int(user_input)-1][-1] == '/':                       # use '/' character appended by server to distinguish between files and dirs. If there is a '/', it is a dir. 
                     new_filepath = os.path.join(target_dir, (os.path.basename(options[int(user_input)-1])))
                     if os.path.exists(new_filepath):                                # check for potential overwrite. If so, add (1), (2), etc. to indicate copy number.
-                        for i in range(1, FILE_COPY_LIMIT):                                 # bad implementation, but ain't nobody gonna make more than 1 million copies of a file.. right?????
+                        for i in range(1, FILE_COPY_LIMIT):                         # bad implementation, but ain't nobody gonna make more than 1 million copies of a file.. right?????
                             if os.path.exists(new_filepath.split('.')[0] + f' ({i})' + '.' + new_filepath.split('.')[1]):
                                 continue
                             new_filepath = new_filepath.split('.')[0] + f' ({i})' + '.' + new_filepath.split('.')[1]
@@ -214,13 +217,13 @@ def request_handler(client_socket, filename, target_dir):
                     dirname = filename[:-1]
                     tempfilename = dirname.replace('/', '_', 1) + '_temp.zip'
                     if os.path.exists(extraction_dir):                              # check for potential overwrite. If so, add (1), (2), etc. to indicate copy number.
-                        for i in range(1, FILE_COPY_LIMIT):                                 # bad implementation, but ain't nobody gonna make more than 1 million copies of a file.. right?????
+                        for i in range(1, FILE_COPY_LIMIT):                         # bad implementation, but ain't nobody gonna make more than 1 million copies of a file.. right?????
                             if os.path.exists(extraction_dir + f' ({i})'):
                                 continue
                             extraction_dir += f' ({i})'
                             break
                     os.makedirs(extraction_dir, exist_ok=True)
-                    with open(tempfilename, 'wb') as temp_zip:               # receive zip file binary. This opens a temp zip file.
+                    with open(tempfilename, 'wb') as temp_zip:                      # receive zip file binary. This opens a temp zip file.
                         while True: 
                             zip_data = client_socket.recv(BUF_SIZE_LARGE)
                             if not zip_data:
@@ -228,10 +231,10 @@ def request_handler(client_socket, filename, target_dir):
                             temp_zip.write(zip_data)
                         temp_zip.flush()                                            # weird solution that fixed 'not a zip file' error for me
                         os.fsync(temp_zip.fileno())
-                        with zipfile.ZipFile(tempfilename, 'r') as zip_file: # use zipfile API to unzip requested directory 
+                        with zipfile.ZipFile(tempfilename, 'r') as zip_file:        # use zipfile API to unzip requested directory 
                             zip_file.extractall(path=extraction_dir)
                             print("Directory unzipped successfully")
-                    os.remove(tempfilename)                                  # remove temp zip file. 
+                    os.remove(tempfilename)                                         # remove temp zip file. 
         else: 
             print("Error: File not found in server. Exiting.")
     except json.decoder.JSONDecodeError:
@@ -239,11 +242,11 @@ def request_handler(client_socket, filename, target_dir):
         
 # helper functions
 
-def wait_for_server_resp(client_socket, resp):                                              # helper function that polls for specific server response
+def wait_for_server_resp(client_socket, resp):                                      # helper function that polls for specific server response
     resp_len = len(resp)
     while True:
         server_resp = client_socket.recv(resp_len).decode('utf-8')
-        if resp in server_resp and resp in command_table.keys():
+        if resp in server_resp and resp in command_table.values():
             break
 
 if __name__ == "__main__":

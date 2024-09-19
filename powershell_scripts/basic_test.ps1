@@ -9,19 +9,8 @@ $clients = @(
     @{Name="client4"; IP="192.168.1.204"; User="client4"; ScriptPath="client-code/client.py"}
 )
 
-# foreach ($vm in $servers) {
-#     $command = "python3 " + $vm.ScriptPath 
-#     $sshCommand = "ssh $($vm.User)@$($vm.IP) $command"
-    
-#     Write-Host "Executing on $($vm.Name): $sshCommand"
-    
-#     # Execute the command and capture output
-#     $result = Invoke-Expression -Command $sshCommand
-#     Write-Host "Output from $($vm.Name): $result"
-# }
-
-foreach ($vm in $clients) {
-    $command = "python3 " + $vm.ScriptPath + " 192.168.1.224 REQUEST wtf"
+foreach ($vm in $servers) {
+    $command = "python3 " + $vm.ScriptPath 
     $sshCommand = "ssh $($vm.User)@$($vm.IP) $command"
     
     Write-Host "Executing on $($vm.Name): $sshCommand"
@@ -31,4 +20,14 @@ foreach ($vm in $clients) {
     Write-Host "Output from $($vm.Name): $result"
 }
 
+foreach ($vm in $clients) {
+    $command = "python3 " + $vm.ScriptPath + " REQUEST wtf client-files"
+    $sshCommand = "ssh $($vm.User)@$($vm.IP) $command"
+    
+    Write-Host "Executing on $($vm.Name): $sshCommand"
+    
+    # Execute the command and capture output
+    $result = Invoke-Expression -Command $sshCommand
+    Write-Host "Output from $($vm.Name): $result"
+}
 
