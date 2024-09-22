@@ -59,7 +59,7 @@ def server_request(command, filename, target_dir):
             client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             client_socket.connect((server_ip, port))
-            server_msg = f"{command}|{filename}"
+            server_msg = f"{os.getlogin()}|{command}|{filename}"                            # send client username, command, and file name to server for processing
             client_socket.sendall(server_msg.encode())                                      # send server message 
         except socket.gaierror:
             print("Error: Invalid server IP. Exiting.")                                     # invalid format case 
@@ -72,7 +72,6 @@ def server_request(command, filename, target_dir):
             while True: 
                 server_resp = client_socket.recv(AUTH_RESP_LEN).decode('utf-8')             # wait for server authentication response
                 if (server_resp[:-1] == 'AUTH'):                                            # could be either auth success or fail 
-                    print(server_resp)
                     break
             if server_resp == 'AUTHS':                                                      # auth success: handle request 
                 status = handle_overwrite(client_socket)
@@ -160,7 +159,7 @@ def store_handler(client_socket, filename, target_dir):
             print("Zipped directory sent successfully")
         os.remove(filename + '.zip')  
     else: 
-        print("Error: the file or directory you requested to store does not exist. Exiting.")    # case of invalid file name
+        print("Error: the file or directory you requested to store does not exist. Exiting.")                       # case of invalid file name
 
 def request_handler(client_socket, filename, target_dir):
 

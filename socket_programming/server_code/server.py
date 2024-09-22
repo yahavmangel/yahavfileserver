@@ -71,15 +71,22 @@ def client_handler(conn):
             return 
 
         client_msg = conn.recv(BUF_SIZE_SMALL).decode('utf-8')                              # receive and parse initial client message
-        command, filename = client_msg.split('|', 1)
-        client_name = hostname.split('.')[0]
+        name, command, filename = client_msg.split('|')
+        ldap_conn = initiate_ldap_conn()
+        entries = get_ldap_user_info(ldap_conn, name.split('@')[0], ['cn'])
+        if entries: 
+            client_name = entries[0].cn.value 
+        else:
+            print("Error: Unauthorized connection. Exiting.")  
+            conn.close()
+            return 
         client_dir = os.path.join('../files', client_name)                                  # get client's directory name in fileserver 
 
         # handle main requests
 
         if command == 'STORE':
 
-            if check_ldap_auth(client_name, 'write'):                                       # check if client has write perms                  
+            if check_ldap_auth(ldap_conn, client_name, 'write'):                            # check if client has write perms                  
                 print("Authorized.")
                 conn.sendall(command_table['AUTHSUCCESS'].encode())                         # indicate to client that they are authorized and may proceed
                 handle_store(conn, filename, client_dir, client_name)                       # process client request 
@@ -91,7 +98,7 @@ def client_handler(conn):
                     
         elif command == 'REQUEST':
 
-            if check_ldap_auth(client_name, 'read'):                                        # check if client has write perms
+            if check_ldap_auth(ldap_conn, client_name, 'read'):                             # check if client has write perms
                 print("Authorized.")
                 conn.sendall(command_table['AUTHSUCCESS'].encode())                         # indicate to client that they are authorized and may proceed
                 handle_request(conn, filename)                                              # process client request
@@ -244,29 +251,21 @@ def get_file_lock(filename):
             file_lock_dict[filename] = threading.Lock()
         return file_lock_dict[filename]
     
-def check_ldap_auth(username, perm):
+def check_ldap_auth(ldap_conn, username, perm):
 
     print(f'verifying {username} permissions...')
 
-    # initiate LDAP server connection
-
-    domain_dn = construct_dn('')                                                                                            # get DN of full domain
-    ldap_server = f'ldap://{domain_controller}'                                                                             
-    server = Server(ldap_server, get_info=ALL)                                                                              # Connect to the LDAP server using GSSAPI (Kerberos) authentication
-    ldap_conn = Connection(server, authentication=SASL, sasl_mechanism=GSSAPI)    
-    ldap_conn.bind()
-
     # query #1: get DN and nTSecurityDescriptor of client 
 
-    ldap_conn.search(search_base=domain_dn, 
-                     search_filter=f'(|(&(objectClass=user)(cn={username}))(&(objectClass=computer)(cn={username})))',      # look for either users or computer accounts with the client's name
-                     attributes=['distinguishedName', 'nTSecurityDescriptor'])                                              # return both their full DN and their security descriptor
+    entries = get_ldap_user_info(ldap_conn, username, ['distinguishedName', 'nTSecurityDescriptor'])                        # return both their full DN and their security descriptor
     
-    if ldap_conn.entries: 
-        user_dn = ldap_conn.entries[0].distinguishedName.value
-        bin_sd = ldap_conn.entries[0].ntSecurityDescriptor.raw_values[0]                                                    # get binary data of security descriptor 
+    if entries: 
+        user_dn = entries[0].distinguishedName.value
+        bin_sd = entries[0].ntSecurityDescriptor.raw_values[0]                                                              # get binary data of security descriptor 
         
         # query #2: get all groups that the client is member of
+
+        domain_dn = construct_dn('')
 
         ldap_conn.search(search_base=domain_dn,                                                                             
                          search_filter=f'(&(objectCategory=group)(member={user_dn}))',                                      # look for groups that the client is a member of, as they will contain the permissions which the user will inherit
@@ -310,7 +309,22 @@ def auth_request(security_desc, target_permission, sid_list):
     dc_socket.close()
     return resp                                                                 # return DC's authentication result to main code 
 
-def construct_dn(basename):
+def initiate_ldap_conn():                                                       # get DN of full domain
+    ldap_server = f'ldap://{domain_controller}'                                                                             
+    server = Server(ldap_server, get_info=ALL)                                  # Connect to the LDAP server using GSSAPI (Kerberos) authentication
+    ldap_conn = Connection(server, authentication=SASL, sasl_mechanism=GSSAPI)    
+    ldap_conn.bind()
+    return ldap_conn
+
+def get_ldap_user_info(ldap_conn, username, attributes):                        # query to collect attributes from a given user/computer account 
+    domain_dn = construct_dn('')
+    ldap_conn.search(search_base=domain_dn,                                     # this query works on either user or computer accounts (using AND/OR syntax)
+                    search_filter=f'(|(&(objectClass=user)(|(cn={username})(sAMAccountName={username})))(&(objectClass=computer)(cn={username})))',
+                    attributes=attributes)
+
+    return ldap_conn.entries
+
+def construct_dn(basename):                                                     # helper function to construct distinguishedName of particular object in domain. 
 
     for i in range(0, len(dc_array)):
         basename += ('DC=' + dc_array[i])
