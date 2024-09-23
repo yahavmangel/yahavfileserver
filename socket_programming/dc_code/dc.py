@@ -3,6 +3,7 @@ import win32security
 import configparser
 import threading
 import json
+import logging 
 
 # important metadata
 
@@ -14,6 +15,15 @@ port = int(config['dc']['port'])
 
 GENERIC_FILE_READ = 0x120089                                                        # bit mask of generic file read permissions as defined by windows security manual
 GENERIC_FILE_WRITE = 0x120116                                                       # bit mask of generic file write permissions as defined by windows security manual
+
+# logging 
+
+logging.basicConfig(level=logging.DEBUG,
+                    format='%(name)s - %(levelname)s - %(message)s',
+                    filename=f'dc.log')
+
+logger = logging.getLogger()
+
 
 # main code
 
@@ -47,7 +57,7 @@ def auth_code(conn):
         except: continue
         if(win32security.ConvertSidToStringSid(ace_sid) in sid_list):               # if the current ACE is associated with a SID that we care about
             permissions = ace[1]                                                    # grab access mask of current ACE
-            print(f'{sid_name} is {i} and has permissions {hex(permissions)}. Read is {str(bool((permissions & GENERIC_FILE_READ)))}, and Write is {str(bool((permissions & GENERIC_FILE_WRITE)))}.')
+            logger.info(str(sid_name) + " has permissions " + str(hex(permissions)) + ". Has read access: " + str(bool((permissions & GENERIC_FILE_READ))) + ", has write access: " + str(bool((permissions & GENERIC_FILE_WRITE))) + ".")
             match target_permission:                                                
                 case 'read':                                                        # check for read perms
                     perm_flag = int(bool(permissions & GENERIC_FILE_READ))          # bitwise AND with generic permission bit mask to get result 
@@ -56,7 +66,7 @@ def auth_code(conn):
                     perm_flag = int(bool(permissions & GENERIC_FILE_WRITE))         # bitwise AND with generic permission bit mask to get result
                     if not perm_flag: break                                         # if even ONE of the groups in the list deny access, deny access altogether
 
-    print(f'Authentication concluded. Result: {perm_flag}')
+    logger.info("Authentication concluded. Result: " + str(perm_flag))
 
     # send authentication result and close server connection
 
@@ -76,16 +86,16 @@ if __name__ == "__main__":
     dc_socket.bind(('0.0.0.0', port))                                                  
     dc_socket.listen(5)
 
-    print("DC is listening...")
+    logger.info("DC is listening...")
 
     while True:
         try: 
             conn, addr = dc_socket.accept()                                         # every time a connection is accepted, make a new thread
-            print(f"Connected by {addr}")
+            logger.info("Connected by " + str(addr))
             server_thread = threading.Thread(target=auth_code, args=(conn,))
             server_thread.start()
         except KeyboardInterrupt:
-            print("Shutting down server...")
+            logger.info("Shutting down DC...")
             dc_socket.close()
             conn.close()
             break

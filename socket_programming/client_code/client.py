@@ -4,6 +4,7 @@ import json
 import os
 import zipfile
 import configparser
+import logging
 
 # important metadata
 
@@ -11,6 +12,7 @@ config = configparser.ConfigParser()
 config.read('client-code/config.ini')
 server_ip = config['client']['server_ip']
 port = int(config['client']['port'])
+login_name = os.getlogin()
 
 command_table = { 
 
@@ -41,6 +43,14 @@ BUF_SIZE_SMALL = 1024
 BUF_SIZE_LARGE = 4096
 FILE_COPY_LIMIT = 1000000
 
+#logging 
+
+logging.basicConfig(level=logging.DEBUG,
+                    format='%(name)s - %(levelname)s - %(message)s',
+                    filename=f'{login_name}.log')
+
+logger = logging.getLogger()
+
 # main code 
 
 def server_request(command, filename, target_dir):
@@ -50,7 +60,7 @@ def server_request(command, filename, target_dir):
         # input validation
     
         if not (command == 'STORE' or command == 'REQUEST'):
-            print("Error: invalid command")
+            logger.error("Invalid command")
             return 
         
         # connection setup
@@ -62,7 +72,7 @@ def server_request(command, filename, target_dir):
             server_msg = f"{os.getlogin()}|{command}|{filename}"                            # send client username, command, and file name to server for processing
             client_socket.sendall(server_msg.encode())                                      # send server message 
         except socket.gaierror:
-            print("Error: Invalid server IP. Exiting.")                                     # invalid format case 
+            logger.critical("Invalid server IP. Exiting.")                                 # invalid format case 
             return
 
         # handle client command
@@ -75,12 +85,10 @@ def server_request(command, filename, target_dir):
                     break
             if server_resp == 'AUTHS':                                                      # auth success: handle request 
                 status = handle_overwrite(client_socket)
-                if status == 0:                                                             # chose to quit after overwrite
-                    return
-                elif status == 1:                                                           # either no overwrite, or chose to proceed
-                    store_handler(client_socket, filename, target_dir)                       
+                if not status: return                                                       # either no overwrite, or chose to proceed
+                else: store_handler(client_socket, filename, target_dir)                       
             elif server_resp == 'AUTHF':                                                    # auth fail: reject request
-                print("Permission denied. Exiting.")
+                logger.error("Permission denied. Exiting.")
                 return
 
         elif command == 'REQUEST':
@@ -92,7 +100,7 @@ def server_request(command, filename, target_dir):
             if server_resp == 'AUTHS':                                                      # auth success: handle request 
                 request_handler(client_socket, filename, target_dir)
             elif server_resp == 'AUTHF':                                                    # auth fail: rejct request 
-                print("Permission denied. Exiting.")
+                logger.error("Permission denied. Exiting.")
                 return
     
         #close connection
@@ -100,7 +108,7 @@ def server_request(command, filename, target_dir):
         client_socket.close()
         
     except ConnectionError: 
-        print("Connection Error. Exiting.")
+        logger.critical("Connection Error. Exiting.")
 
 def handle_overwrite(client_socket):
 
@@ -117,32 +125,28 @@ def handle_overwrite(client_socket):
             if user_input == 'n' or user_input == 'y':
                 break
             else:
-                print ("Invalid input, try again\n")
+                print("Invalid input, try again\n")
         if user_input == 'n':
-            print("Request canceled.")
-            server_msg = "QUIT"                                                             # notify server that you quit
-            client_socket.sendall(server_msg.encode()) 
+            logger.info("Request canceled.")                                    
+            send_client_msg(client_socket, "QUIT")                                          # notify server that you quit
             client_socket.close()                                                   
-            return 0
+            return False
         elif user_input == 'y':
-            server_msg = "ACK"                                                              # notify server that you acknowledge overwrite
-            client_socket.sendall(server_msg.encode())
+            send_client_msg(client_socket, "ACK")                                           # notify server that you acknowledge overwrite
             wait_for_server_resp(client_socket, "READY")                                    # check that server is ready AFTER overwrite
-            return 1
-    else: return 1
+            return True                
+    else: return True
 
 def store_handler(client_socket, filename, target_dir):
 
     if os.path.isfile(filename):
-        server_msg = 'STOREFILE'
-        client_socket.sendall(server_msg.encode()) 
+        send_client_msg(client_socket, "STOREFILE")
         with open(filename, 'rb') as file:
             data = file.read()                                                              # Read the whole file
             client_socket.sendall(data)                                                     # Send all the data
-            print("File sent successfully") 
+            logger.info("File sent successfully") 
     elif os.path.isdir(filename):
-        server_msg = 'STOREDIR'
-        client_socket.sendall(server_msg.encode()) 
+        send_client_msg(client_socket, "STOREDIR")
         with zipfile.ZipFile(filename + '.zip', 'w') as temp_zip:
             for root, dirs, files in os.walk(filename):
                 for file in files:                                                                                  # add every file to zip archive
@@ -156,10 +160,10 @@ def store_handler(client_socket, filename, target_dir):
         with open(filename + '.zip', 'rb') as zip: 
             data = zip.read()
             client_socket.sendall(data)
-            print("Zipped directory sent successfully")
+            logger.info("Zipped directory sent successfully")
         os.remove(filename + '.zip')  
     else: 
-        print("Error: the file or directory you requested to store does not exist. Exiting.")                       # case of invalid file name
+        logger.error("The file or directory you requested to store does not exist. Exiting.")                       # case of invalid file name
 
 def request_handler(client_socket, filename, target_dir):
 
@@ -207,7 +211,7 @@ def request_handler(client_socket, filename, target_dir):
                             if not data:
                                 break
                             file.write(data)
-                        print("File received successfully")
+                        logger.info("File received successfully")
 
                 # handle directory request response 
 
@@ -232,12 +236,12 @@ def request_handler(client_socket, filename, target_dir):
                         os.fsync(temp_zip.fileno())
                         with zipfile.ZipFile(tempfilename, 'r') as zip_file:        # use zipfile API to unzip requested directory 
                             zip_file.extractall(path=extraction_dir)
-                            print("Directory unzipped successfully")
+                            logger.info("Directory unzipped successfully")
                     os.remove(tempfilename)                                         # remove temp zip file. 
         else: 
-            print("Error: File not found in server. Exiting.")
+            logger.error("File not found in server. Exiting.")
     except json.decoder.JSONDecodeError:
-        print("No matching results in server. Exiting.")
+        logger.error("No matching results in server. Exiting.")
         
 # helper functions
 
@@ -247,6 +251,10 @@ def wait_for_server_resp(client_socket, resp):                                  
         server_resp = client_socket.recv(resp_len).decode('utf-8')
         if resp in server_resp and resp in command_table.values():
             break
+
+def send_client_msg(conn, msg):
+    logger.debug("Client " + str(login_name) + " sent message to server: " + msg)                       # log each server message in debug level of logger 
+    conn.sendall(command_table[msg].encode())
 
 if __name__ == "__main__":
     server_request(sys.argv[1], sys.argv[2], sys.argv[3])

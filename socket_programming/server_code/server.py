@@ -6,6 +6,7 @@ import zipfile
 import configparser
 from difflib import get_close_matches
 from ldap3 import Server, Connection, ALL, SASL, GSSAPI
+import logging 
 
 # important metadata
 
@@ -16,6 +17,7 @@ port2 = int(config['server']['port2'])
 domain_controller = config['server']['domain_controller']
 domain_controller_ip = config['server']['domain_controller_ip']
 dc_array = domain_controller.split('.')[1:]
+login_name = os.getlogin()
 
 command_table = { 
 
@@ -55,6 +57,14 @@ SIMILARITY_IDX = 0.5
 file_lock_dict = {}
 global_dict_lock = threading.Lock()                                                         # lock for locking the file lock dictionary (make it thread safe as well)
 
+#logging 
+
+logging.basicConfig(level=logging.DEBUG,
+                    format='%(name)s - %(levelname)s - %(message)s',
+                    filename=f'{login_name}.log')
+
+logger = logging.getLogger()
+
 # main code 
 
 def client_handler(conn):
@@ -65,8 +75,9 @@ def client_handler(conn):
 
         try: 
             hostname, alias, ip_addresses = socket.gethostbyaddr(addr[0])                   # reverse DNS lookup on ip address to get hostname
+            logger.info("Client host connected: " + str(hostname))
         except socket.herror: 
-            print("DNS server offline. Quitting.")
+            logger.critical("DNS server offline. Quitting.")
             conn.close()
             return 
 
@@ -77,7 +88,7 @@ def client_handler(conn):
         if entries: 
             client_name = entries[0].cn.value 
         else:
-            print("Error: Unauthorized connection. Exiting.")  
+            logger.error("Unauthorized connection. Exiting.")  
             conn.close()
             return 
         client_dir = os.path.join('../files', client_name)                                  # get client's directory name in fileserver 
@@ -87,24 +98,24 @@ def client_handler(conn):
         if command == 'STORE':
 
             if check_ldap_auth(ldap_conn, client_name, 'write'):                            # check if client has write perms                  
-                print("Authorized.")
-                conn.sendall(command_table['AUTHSUCCESS'].encode())                         # indicate to client that they are authorized and may proceed
+                logger.info("Client " + str(client_name) + " is authorized.")
+                send_server_msg(conn, 'AUTHSUCCESS')                         # indicate to client that they are authorized and may proceed
                 handle_store(conn, filename, client_dir, client_name)                       # process client request 
             else:                                                                           # client is not authorized
-                print("Error: client not authorized to make request. Exiting.")
-                conn.sendall(command_table['AUTHFAIL'].encode())                            # indicate to client that they are not authorized
+                logger.error("Client not authorized to make request. Exiting.")
+                send_server_msg(conn, 'AUTHFAIL')                            # indicate to client that they are not authorized
                 conn.close()                                                                # stop connection
                 return
                     
         elif command == 'REQUEST':
 
             if check_ldap_auth(ldap_conn, client_name, 'read'):                             # check if client has write perms
-                print("Authorized.")
-                conn.sendall(command_table['AUTHSUCCESS'].encode())                         # indicate to client that they are authorized and may proceed
+                logger.info("Client " + str(client_name) + " is authorized.")
+                send_server_msg(conn, 'AUTHSUCCESS')                         # indicate to client that they are authorized and may proceed
                 handle_request(conn, filename)                                              # process client request
             else:
-                print("Error: client not authorized to make request. Exiting.")
-                conn.sendall(command_table['AUTHFAIL'].encode())                            # indicate to client that they are not authorized
+                logger.error("Client not authorized to make request. Exiting.")
+                send_server_msg(conn, 'AUTHFAIL')                            # indicate to client that they are not authorized
                 conn.close()                                                                # stop connection
                 return
 
@@ -113,7 +124,7 @@ def client_handler(conn):
         conn.close()
 
     except ConnectionError: 
-        print("Connection Error. Exiting.")
+        logger.critical("Server connection Failure. Exiting.")
 
 
 def handle_store(conn, filename, client_dir, client_name):
@@ -121,19 +132,19 @@ def handle_store(conn, filename, client_dir, client_name):
     # check for overwrite
 
     if os.path.exists(os.path.join(client_dir, filename.split('/')[-1])): 
-        conn.sendall(command_table['OVERWRITE'].encode())                                   # notify client of potential overwrite
+        send_server_msg(conn, 'OVERWRITE')                                   # notify client of potential overwrite
         client_msg = conn.recv(BUF_SIZE_SMALL).decode('utf-8')                              # receive client response to overwrite
         while True: 
             if ((client_msg == 'ACK') or (client_msg == 'QUIT')):                           # wait for client response to overwrite
                 break
         if client_msg == 'QUIT':                                                            # client decided to abort to avoid overwrite
-            print("Request canceled.")
+            logger.info("Request successfully canceled.")
             conn.close()
             return 
 
     # initiate request 
 
-    conn.sendall(command_table['READY'].encode())                                           # indicate to client that server is ready 
+    send_server_msg(conn, 'READY')                                           # indicate to client that server is ready 
 
     while True: 
         client_msg = conn.recv(BUF_SIZE_SMALL).decode('utf-8')                              # wait for client's message of file type to store 
@@ -153,12 +164,12 @@ def handle_store(conn, filename, client_dir, client_name):
                     if not data:
                         if not data_flag:
                             os.remove(os.path.join(client_dir, os.path.basename(filename))) # if file is empty, don't actually create anything
-                            print("Error: file contained no data")   
+                            logger.warning("File contained no data. No file has been created.")   
                         break
                     file.write(data)
                     data_flag = 1
                 if data_flag: 
-                    print("File stored successfully")
+                    logger.info("File " + str(filename) + " stored successfully")
     
     elif client_msg == 'STOREDIR':
                                                   
@@ -178,22 +189,22 @@ def handle_store(conn, filename, client_dir, client_name):
                 os.fsync(temp_zip.fileno())
                 with zipfile.ZipFile(tempfilename, 'r') as zip_file:                        # use zipfile API to unzip requested directory 
                     zip_file.extractall(path=extraction_dir)
-                    print("Directory unzipped successfully")
+                    logger.info("Directory " + str(dirname) + " unzipped and stored successfully")
             os.remove(tempfilename)                                                         # remove temp zip file. 
     
 def handle_request(conn, filename):
 
-    conn.sendall(command_table['READY'].encode())
+    send_server_msg(conn, 'READY')
     json_list = json.dumps(similarity_search("../files/", filename))                        # call search algorithm and send result to client
-    conn.sendall(command_table['OPTIONS'].encode())
+    send_server_msg(conn, 'OPTIONS')
     if not json.loads(json_list):                                                           # list is empty
-        print("Error: search unsuccessful. Closing.")
+        logger.error("search unsuccessful. Closing.")
     else:     
         conn.sendall(json_list.encode('utf-8'))
         client_msg = conn.recv(BUF_SIZE_SMALL).decode('utf-8')                              # receive back client's number choice, which is index into list
         options = json.loads(json_list) 
         if int(client_msg) > len(options):                                                  # client chose N/A option
-            print("Error: search unsuccessful. Closing.")
+            logger.error("search unsuccessful. Closing.")
         else: 
 
             target_file = options[int(client_msg)-1]
@@ -206,7 +217,7 @@ def handle_request(conn, filename):
                     with open(os.path.join('../files', target_file), 'rb') as file: 
                         data = file.read()                                                  # send target file to client
                         conn.sendall(data)
-                        print("File sent successfully")
+                        logger.info("File sent successfully")
             
             # directory request 
             
@@ -228,7 +239,7 @@ def handle_request(conn, filename):
                     with open(tempfilename, 'rb') as zip_file:                              # open file in binary mode to send it over socket
                         data = zip_file.read()
                         conn.sendall(data)
-                        print("Zipped directory sent successfully")
+                        logger.info("Zipped directory sent successfully")
                     os.remove(tempfilename)                                                 # remove temporary file
 
 # helper functions
@@ -253,7 +264,7 @@ def get_file_lock(filename):
     
 def check_ldap_auth(ldap_conn, username, perm):
 
-    print(f'verifying {username} permissions...')
+    logger.debug("verifying " + str(username) + " permissions...")
 
     # query #1: get DN and nTSecurityDescriptor of client 
 
@@ -275,7 +286,7 @@ def check_ldap_auth(ldap_conn, username, perm):
             groups_to_check = []                                                                                            # list of SIDs to be sent to the domain controller for permission checking
             for entry in ldap_conn.entries: 
                 if((entry.groupType.value & SEC_GROUP_BITMASK) != 0):                                                       # check if the group is a security group (not a distribution group)
-                    print(f'{username} is a member of the {entry.cn.value} security group')
+                    logger.debug(str(username) + " is a member of the " + str(entry.cn.value) + " security group")
                     groups_to_check.append(entry.objectSid.value)                                                           # add SID of security group to the list
             return bool(auth_request(bin_sd, perm, groups_to_check))                                                        # send authentication request to domain controller, and return result to main code
         
@@ -339,6 +350,10 @@ def wait_for_server_resp(dc_socket, resp):                                      
         if resp in server_resp and resp in command_table.values():
             break
 
+def send_server_msg(conn, msg):
+    logger.debug("Server sent message to client: " + msg)                       # log each server message in debug level of logger 
+    conn.sendall(command_table[msg].encode())
+
 # main loop 
 
 if __name__ == "__main__":
@@ -350,10 +365,10 @@ if __name__ == "__main__":
     server_socket.bind(('0.0.0.0', port))                                                  
     server_socket.listen(5)
 
-    print("Server is listening...")
+    logger.info("Server is listening...")
 
     while True:
         conn, addr = server_socket.accept()                                     # every time a connection is accepted by server, make a new thread
-        print(f"Connected by {addr}")
+        logger.info("Connected by " + str(addr))
         client_thread = threading.Thread(target=client_handler, args=(conn,))
         client_thread.start()
