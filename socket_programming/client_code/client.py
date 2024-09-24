@@ -6,13 +6,27 @@ import zipfile
 import configparser
 import logging
 
-# important metadata
+# logging and metadata
 
-config = configparser.ConfigParser()
-config.read('client-code/config.ini')
-server_ip = config['client']['server_ip']
-port = int(config['client']['port'])
+script_dir = os.path.dirname(os.path.abspath(__file__))                                     # make script execution dynamic 
 login_name = os.getlogin()
+
+logging.basicConfig(level=logging.DEBUG,
+                    format='(%(name)s) %(levelname)s: %(message)s',                         
+                    filemode = 'w',                                                         # script overwrites for each new request 
+                    filename=os.path.join(script_dir, f'{login_name}.log'))
+
+logger = logging.getLogger(login_name)
+
+try:                                                                                        # collect config file info 
+    config = configparser.ConfigParser()
+    config.read(os.path.join(script_dir, 'config.ini'))
+    server_ip = config['client']['server_ip']
+    port = int(config['client']['port'])
+    target_dir = os.path.join(script_dir, config['client']['target_dir'])
+except KeyError:                                                                            # check for misconfigured config file 
+    logger.critical(f"Missing or misconfigured config file")    
+    sys.exit(1) 
 
 command_table = { 
 
@@ -29,7 +43,7 @@ command_table = {
     'QUIT': 'QUIT',
     'ACK': 'ACK',
     'STOREFILE': 'STOREFILE',
-    'STOREDIR': 'STOREDIR',
+    'STOREDIRE': 'STOREDIRE',
     'AUTHSUCCESS': 'AUTHS',
     'AUTHFAIL': 'AUTHF'
 }
@@ -43,17 +57,9 @@ BUF_SIZE_SMALL = 1024
 BUF_SIZE_LARGE = 4096
 FILE_COPY_LIMIT = 1000000
 
-#logging 
-
-logging.basicConfig(level=logging.DEBUG,
-                    format='%(name)s - %(levelname)s - %(message)s',
-                    filename=f'{login_name}.log')
-
-logger = logging.getLogger()
-
 # main code 
 
-def server_request(command, filename, target_dir):
+def server_request(command, filename):
 
     try: 
 
@@ -68,11 +74,17 @@ def server_request(command, filename, target_dir):
         try:
             client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            client_socket.connect((server_ip, port))
+            try: 
+                client_socket.settimeout(10)
+                client_socket.connect((server_ip, port))
+            except socket.timeout:
+                logger.critical("Connection timed out. Server unreachable.")
+                return
+            logger.info("Connected to server: " + server_ip)
             server_msg = f"{os.getlogin()}|{command}|{filename}"                            # send client username, command, and file name to server for processing
             client_socket.sendall(server_msg.encode())                                      # send server message 
         except socket.gaierror:
-            logger.critical("Invalid server IP. Exiting.")                                 # invalid format case 
+            logger.critical("Invalid server IP. Exiting.")                                  # invalid format case 
             return
 
         # handle client command
@@ -84,6 +96,7 @@ def server_request(command, filename, target_dir):
                 if (server_resp[:-1] == 'AUTH'):                                            # could be either auth success or fail 
                     break
             if server_resp == 'AUTHS':                                                      # auth success: handle request 
+                logger.debug("Received authorization from server")
                 status = handle_overwrite(client_socket)
                 if not status: return                                                       # either no overwrite, or chose to proceed
                 else: store_handler(client_socket, filename, target_dir)                       
@@ -93,22 +106,25 @@ def server_request(command, filename, target_dir):
 
         elif command == 'REQUEST':
 
+            
             while True: 
                 server_resp = client_socket.recv(AUTH_RESP_LEN).decode('utf-8')             # wait for server authentication response
                 if ('AUTH' in server_resp):
                     break
-            if server_resp == 'AUTHS':                                                      # auth success: handle request 
+            if server_resp == 'AUTHS': 
+                logger.debug("Received authorization from server")                          # auth success: handle request 
                 request_handler(client_socket, filename, target_dir)
             elif server_resp == 'AUTHF':                                                    # auth fail: rejct request 
                 logger.error("Permission denied. Exiting.")
                 return
-    
-        #close connection
-
-        client_socket.close()
         
     except ConnectionError: 
         logger.critical("Connection Error. Exiting.")
+    except TimeoutError:
+        logger.critical("Connection timed out. Server unreachable.")
+    finally: 
+        client_socket.close()
+
 
 def handle_overwrite(client_socket):
 
@@ -132,6 +148,7 @@ def handle_overwrite(client_socket):
             client_socket.close()                                                   
             return False
         elif user_input == 'y':
+            logger.info("Acknowledged overwrite")
             send_client_msg(client_socket, "ACK")                                           # notify server that you acknowledge overwrite
             wait_for_server_resp(client_socket, "READY")                                    # check that server is ready AFTER overwrite
             return True                
@@ -139,14 +156,22 @@ def handle_overwrite(client_socket):
 
 def store_handler(client_socket, filename, target_dir):
 
+    logger.debug("Checking if " + str(filename) + " is a file or a directory...")
     if os.path.isfile(filename):
+        logger.debug("Result: is a file")
         send_client_msg(client_socket, "STOREFILE")
-        with open(filename, 'rb') as file:
-            data = file.read()                                                              # Read the whole file
-            client_socket.sendall(data)                                                     # Send all the data
-            logger.info("File sent successfully") 
+        try: 
+            with open(filename, 'rb') as file:
+                while chunk := file.read(BUF_SIZE_LARGE):
+                    client_socket.sendall(chunk)                                            # Send all the data
+                logger.info("File " + str(filename) + " sent successfully")
+        except IOError as e:
+            logger.error("Error reading file " + str(filename) + ": " + str(e))
+            client_socket.close()
+            return 
     elif os.path.isdir(filename):
-        send_client_msg(client_socket, "STOREDIR")
+        logger.debug("Result: is a directory")
+        send_client_msg(client_socket, "STOREDIRE")
         with zipfile.ZipFile(filename + '.zip', 'w') as temp_zip:
             for root, dirs, files in os.walk(filename):
                 for file in files:                                                                                  # add every file to zip archive
@@ -158,9 +183,9 @@ def store_handler(client_socket, filename, target_dir):
                     arcname = os.path.relpath(dirpath, start=os.path.join(os.path.join(target_dir, filename)))      # use relative path to maintain correct directory structure
                     temp_zip.write(dirpath, arcname=arcname)
         with open(filename + '.zip', 'rb') as zip: 
-            data = zip.read()
-            client_socket.sendall(data)
-            logger.info("Zipped directory sent successfully")
+            while chunk := zip.read(BUF_SIZE_LARGE):
+                client_socket.sendall(chunk)
+            logger.info("The " + filename + " directory was zipped and sent successfully")
         os.remove(filename + '.zip')  
     else: 
         logger.error("The file or directory you requested to store does not exist. Exiting.")                       # case of invalid file name
@@ -169,7 +194,9 @@ def request_handler(client_socket, filename, target_dir):
 
     wait_for_server_resp(client_socket, "READY")                                    # check that server is ready for request
     try: 
-        wait_for_server_resp(client_socket, "OPTIONS")                              # wait for server to return search options
+        logger.debug("Waiting for server search results...")
+        wait_for_server_resp(client_socket, "OPTIONS")    
+        logger.debug("Results received.")                                           # wait for server to return search options
         json_list = client_socket.recv(BUF_SIZE_LARGE).decode('utf-8')
         options = json.loads(json_list)                                             # decode sent options into local array 
         if (len(options) > 0):                                                      
@@ -179,10 +206,12 @@ def request_handler(client_socket, filename, target_dir):
                 i += 1
                 print (str(i) + ': ' + option)
             print (str(i + 1) + ": N/A \n")
+            logger.debug("Waiting for client choice...")
             while True:
                 user_input = input("Which one? ")
                 try: 
                     if(int(user_input) > 0 and int(user_input) < len(options) + 2): 
+                        logger.debug("Client chose option #" + user_input)
                         break
                     else: 
                         print("Invalid choice, try again\n")
@@ -192,33 +221,41 @@ def request_handler(client_socket, filename, target_dir):
             server_msg = user_input                                                 # send chosen number as server message
             client_socket.sendall(server_msg.encode())                              # send server message 
             if int(user_input) > len(options):                                      # chose N/A option    
+                logger.debug("Client chose N/A option")
                 print("Sorry we couldn't find your file :(")
             else: 
 
                 # handle file request response
-
+                logger.debug("Checking if result is a file or directory...")
                 if not options[int(user_input)-1][-1] == '/':                       # use '/' character appended by server to distinguish between files and dirs. If there is a '/', it is a dir. 
-                    new_filepath = os.path.join(target_dir, (os.path.basename(options[int(user_input)-1])))
+                    logger.debug("Is a file")
+                    new_filepath = os.path.join(target_dir, os.path.basename(options[int(user_input)-1]))
+                    print(os.path.basename(new_filepath).split('.')[0] + f' ({i})' + '.' + os.path.basename(new_filepath).split('.')[1])
                     if os.path.exists(new_filepath):                                # check for potential overwrite. If so, add (1), (2), etc. to indicate copy number.
                         for i in range(1, FILE_COPY_LIMIT):                         # bad implementation, but ain't nobody gonna make more than 1 million copies of a file.. right?????
-                            if os.path.exists(new_filepath.split('.')[0] + f' ({i})' + '.' + new_filepath.split('.')[1]):
+                            if os.path.exists(os.path.join(target_dir, os.path.basename(new_filepath).split('.')[0] + f' ({i})' + '.' + os.path.basename(new_filepath).split('.')[1])):
                                 continue
-                            new_filepath = new_filepath.split('.')[0] + f' ({i})' + '.' + new_filepath.split('.')[1]
+                            new_filepath = os.path.join(target_dir, os.path.basename(new_filepath).split('.')[0] + f' ({i})' + '.' + os.path.basename(new_filepath).split('.')[1])
                             break
-                    with open(new_filepath, 'wb') as file:                          # receive requested file data 
-                        while True: 
-                            data = client_socket.recv(BUF_SIZE_SMALL)
-                            if not data:
-                                break
-                            file.write(data)
-                        logger.info("File received successfully")
+                    try: 
+                        with open(new_filepath, 'wb') as file:                      # receive requested file data 
+                            while True: 
+                                data = client_socket.recv(BUF_SIZE_SMALL)
+                                if not data:
+                                    break
+                                file.write(data)
+                            logger.info("File received successfully")
+                    except IOError as e:
+                        logger.error("Error reading file " + str(new_filepath) + ": " + str(e))
+                        client_socket.close()
+                        return 
 
                 # handle directory request response 
 
                 else: 
+                    logger.debug("Is a directory")
                     extraction_dir = os.path.join(target_dir, os.path.basename(options[int(user_input)-1][:-1]))
-                    dirname = filename[:-1]
-                    tempfilename = dirname.replace('/', '_', 1) + '_temp.zip'
+                    tempfilename = extraction_dir + '_temp.zip'
                     if os.path.exists(extraction_dir):                              # check for potential overwrite. If so, add (1), (2), etc. to indicate copy number.
                         for i in range(1, FILE_COPY_LIMIT):                         # bad implementation, but ain't nobody gonna make more than 1 million copies of a file.. right?????
                             if os.path.exists(extraction_dir + f' ({i})'):
@@ -250,11 +287,12 @@ def wait_for_server_resp(client_socket, resp):                                  
     while True:
         server_resp = client_socket.recv(resp_len).decode('utf-8')
         if resp in server_resp and resp in command_table.values():
+            logger.debug("Received message from server: " + resp)
             break
 
 def send_client_msg(conn, msg):
-    logger.debug("Client " + str(login_name) + " sent message to server: " + msg)                       # log each server message in debug level of logger 
+    logger.debug(str(login_name) + " -> server: " + msg)                            # log each server message in DEBUG log level
     conn.sendall(command_table[msg].encode())
 
 if __name__ == "__main__":
-    server_request(sys.argv[1], sys.argv[2], sys.argv[3])
+    server_request(sys.argv[1], sys.argv[2])

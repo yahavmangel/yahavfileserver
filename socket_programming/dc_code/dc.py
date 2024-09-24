@@ -4,26 +4,32 @@ import configparser
 import threading
 import json
 import logging 
+import os
+import sys
 
-# important metadata
+# logging and metadata
 
-config = configparser.ConfigParser()
-config.read('config.ini')
-port = int(config['dc']['port'])
+script_dir = os.path.dirname(os.path.abspath(__file__))                             # make script execution dynamic 
+
+logging.basicConfig(level=logging.DEBUG,
+                    format='(%(name)s, ID: %(conn_counter)s) %(levelname)s: %(message)s',  
+                    filemode = 'w',                                                 # overwrites for every execution of script 
+                    filename=os.path.join(script_dir, 'dc.log'))                    
+
+logger = logging.getLogger("DC")
+
+try: 
+    config = configparser.ConfigParser()
+    config.read(os.path.join(script_dir, 'config.ini'))
+    port = int(config['dc']['port'])
+except KeyError:                                                                    # check for misconfigured config file 
+    logger.critical(f"Missing or misconfigured config file", extra={'conn_counter': "N/A"})
+    sys.exit(1)
 
 # magic numbers
 
 GENERIC_FILE_READ = 0x120089                                                        # bit mask of generic file read permissions as defined by windows security manual
 GENERIC_FILE_WRITE = 0x120116                                                       # bit mask of generic file write permissions as defined by windows security manual
-
-# logging 
-
-logging.basicConfig(level=logging.DEBUG,
-                    format='%(name)s - %(levelname)s - %(message)s',
-                    filename=f'dc.log')
-
-logger = logging.getLogger()
-
 
 # main code
 
@@ -41,10 +47,10 @@ def auth_code(conn):
     
     # parse server request message 
     
-    bin_sd, target_permission_bin, sid_list_bin = received.split(delimiter)         # split server msg by delimiter
+    bin_sd, target_permission_bin, sid_list_bin, conn_counter = received.split(delimiter)         # split server msg by delimiter
     target_permission = target_permission_bin.decode('utf-8')                   
     sid_list = json.loads(sid_list_bin.decode('utf-8'))
-
+    conn_counter = conn_counter.decode('utf-8')                                     # use for logging 
     # main authentication logic
 
     dacl = win32security.SECURITY_DESCRIPTOR(bin_sd).GetSecurityDescriptorDacl()    # fetch DACL out of the client's security descriptor 
@@ -57,7 +63,7 @@ def auth_code(conn):
         except: continue
         if(win32security.ConvertSidToStringSid(ace_sid) in sid_list):               # if the current ACE is associated with a SID that we care about
             permissions = ace[1]                                                    # grab access mask of current ACE
-            logger.info(str(sid_name) + " has permissions " + str(hex(permissions)) + ". Has read access: " + str(bool((permissions & GENERIC_FILE_READ))) + ", has write access: " + str(bool((permissions & GENERIC_FILE_WRITE))) + ".")
+            logger.info(str(sid_name) + " has permissions " + str(hex(permissions)) + ". Has read access: " + str(bool((permissions & GENERIC_FILE_READ))) + ", has write access: " + str(bool((permissions & GENERIC_FILE_WRITE))) + ".", extra={'conn_counter': conn_counter})
             match target_permission:                                                
                 case 'read':                                                        # check for read perms
                     perm_flag = int(bool(permissions & GENERIC_FILE_READ))          # bitwise AND with generic permission bit mask to get result 
@@ -66,7 +72,7 @@ def auth_code(conn):
                     perm_flag = int(bool(permissions & GENERIC_FILE_WRITE))         # bitwise AND with generic permission bit mask to get result
                     if not perm_flag: break                                         # if even ONE of the groups in the list deny access, deny access altogether
 
-    logger.info("Authentication concluded. Result: " + str(perm_flag))
+    logger.info("Authentication concluded. Result: " + str(perm_flag), extra={'conn_counter': conn_counter})
 
     # send authentication result and close server connection
 
@@ -86,16 +92,16 @@ if __name__ == "__main__":
     dc_socket.bind(('0.0.0.0', port))                                                  
     dc_socket.listen(5)
 
-    logger.info("DC is listening...")
+    logger.info("DC is listening...", extra={'conn_counter': "N/A"})
 
     while True:
         try: 
             conn, addr = dc_socket.accept()                                         # every time a connection is accepted, make a new thread
-            logger.info("Connected by " + str(addr))
+            logger.info("Connected by " + str(addr), extra={'conn_counter': "N/A"})
             server_thread = threading.Thread(target=auth_code, args=(conn,))
             server_thread.start()
         except KeyboardInterrupt:
-            logger.info("Shutting down DC...")
+            logger.info("Shutting down DC...", extra={'conn_counter': "N/A"})
             dc_socket.close()
             conn.close()
             break
