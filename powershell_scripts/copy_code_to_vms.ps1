@@ -20,15 +20,15 @@ $clients = @(
 
 Write-Host "yahavgaming123"
 
-foreach ($vm in $servers) {
-    scp "$PSScriptRoot\..\socket_programming\server_code\server.py" "$($vm.User)@$($vm.IP):$($vm.ScriptPath)"
-    scp "$PSScriptRoot\..\socket_programming\server_code\config.ini" "$($vm.User)@$($vm.IP):$($vm.ScriptPath2)"
-    scp "$PSScriptRoot\..\socket_programming\server_code\loghandler.py" "$($vm.User)@$($vm.IP):$($vm.ScriptPath3)"
-    scp "$PSScriptRoot\..\socket_programming\server_code\auth.py" "$($vm.User)@$($vm.IP):$($vm.ScriptPath4)"
-}
+# foreach ($vm in $servers) {
+#     scp "$PSScriptRoot\..\socket_programming\server_code\server.py" "$($vm.User)@$($vm.IP):$($vm.ScriptPath)"
+#     scp "$PSScriptRoot\..\socket_programming\server_code\config.ini" "$($vm.User)@$($vm.IP):$($vm.ScriptPath2)"
+#     scp "$PSScriptRoot\..\socket_programming\server_code\loghandler.py" "$($vm.User)@$($vm.IP):$($vm.ScriptPath3)"
+#     scp "$PSScriptRoot\..\socket_programming\server_code\auth.py" "$($vm.User)@$($vm.IP):$($vm.ScriptPath4)"
+# }
 
 foreach ($vm in $clients) {
     scp "$PSScriptRoot\..\socket_programming\client_code\client.py" "$($vm.User)@$($vm.IP):$($vm.ScriptPath)"
-    scp "$PSScriptRoot\..\socket_programming\client_code\config.ini" "$($vm.User)@$($vm.IP):$($vm.ScriptPath2)"
-    scp "$PSScriptRoot\..\socket_programming\client_code\loghandler.py" "$($vm.User)@$($vm.IP):$($vm.ScriptPath3)"
+    # scp "$PSScriptRoot\..\socket_programming\client_code\config.ini" "$($vm.User)@$($vm.IP):$($vm.ScriptPath2)"
+    # scp "$PSScriptRoot\..\socket_programming\client_code\loghandler.py" "$($vm.User)@$($vm.IP):$($vm.ScriptPath3)"
 }

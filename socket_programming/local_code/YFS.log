@@ -1,44 +1,42 @@
-(DC) INFO: DC is listening...
-(fileserver, ID: 0) INFO: Server is listening...
-(fileserver, ID: 1) INFO: Connected by ('192.168.1.201', 49900)
-(fileserver, ID: 1) INFO: Client host connected: client1.yahavfileserver.home
+(fileserver, ID: 17) INFO: Connected by ('192.168.1.201', 54582)
 (client1) INFO: Connected to server: 192.168.1.224
-(fileserver, ID: 1) DEBUG: Connecting to LDAP server: ldap://yahav.yahavfileserver.home
-(fileserver, ID: 1) INFO: _______________NEW CONNECTION: client1; COMMAND: REQUEST css; ID: 1______________
-(fileserver, ID: 1) DEBUG: Searching for client in LDAP server...
-(fileserver, ID: 1) CRITICAL: Error connecting to LDAP server. Ensure you have a valid Kerberos ticket.
-(fileserver, ID: 1) ERROR: Unrecognized connection. Exiting.
-(fileserver, ID: 0) INFO: Server is listening...
-(fileserver, ID: 1) INFO: Connected by ('192.168.1.201', 40512)
-(fileserver, ID: 1) INFO: Client host connected: client1
-(client1) INFO: Connected to server: 192.168.1.224
-(fileserver, ID: 1) DEBUG: Connecting to LDAP server: ldap://yahav.yahavfileserver.home
-(fileserver, ID: 1) INFO: _______________NEW CONNECTION: client1; COMMAND: REQUEST css; ID: 1______________
-(fileserver, ID: 1) DEBUG: Searching for client in LDAP server...
-(fileserver, ID: 1) INFO: Successfully connected to LDAP server: ldap://yahav.yahavfileserver.home
-(fileserver, ID: 1) DEBUG: verifying permissions for client client1...
-(fileserver, ID: 1) INFO: Client recognized in LDAP server
-(fileserver, ID: 1) DEBUG: Scanning for client client1 group membership...
-(fileserver, ID: 1) DEBUG: Initiating connection with DC for authorization...
-(fileserver, ID: 1) DEBUG: client1 is a member of the Administrators security group
-(DC) INFO: Connected by ('192.168.1.224', 59202)
-(DC, ID: 1) INFO: Administrators has permissions 0xf01bf. Has read access: True, has write access: True.
-(DC, ID: 1) INFO: Authentication concluded. Result: 1
-(fileserver, ID: 1) DEBUG: Received message from DC: AUTHS
-(fileserver, ID: 1) DEBUG: server -> client1: AUTHSUCCESS
-(fileserver, ID: 1) INFO: Client client1 is authorized.
-(fileserver, ID: 1) DEBUG: server -> client1: READY
-(fileserver, ID: 1) DEBUG: Searching directory: /home/fileserver/server-code/../files. Search keyword is: css
-(client1) DEBUG: Received authorization from server
-(client1) DEBUG: Received message from server: READY
-(client1) DEBUG: Waiting for server search results...
-(fileserver, ID: 1) DEBUG: server -> client1: OPTIONS
-(fileserver, ID: 1) INFO: Search for keyword css successful, server returned 10 options.
-(client1) DEBUG: Received message from server: OPTIONS
-(client1) DEBUG: Results received.
-(client1) DEBUG: Waiting for client choice...
-(fileserver, ID: 1) INFO: Zipped directory sent successfully
-(client1) DEBUG: Client chose option #7
-(client1) DEBUG: Checking if result is a file or directory...
-(client1) DEBUG: Is a directory
+(fileserver, ID: 17) INFO: Client host connected: client1
+(fileserver, ID: 17) INFO: _______________NEW CONNECTION: client1; COMMAND: REQUEST css; ID: 17______________
+(fileserver, ID: 17) INFO: Successfully connected to LDAP server: ldap://yahav.yahavfileserver.home
+(fileserver, ID: 17) INFO: Client recognized in LDAP server
+(DC) INFO: Connected by ('192.168.1.224', 52134)
+(DC, ID: 17) INFO: Administrators has permissions 0xf01bf. Has read access: True, has write access: True.
+(fileserver, ID: 17) INFO: Client client1 is authorized.
+(DC, ID: 17) INFO: Authentication concluded. Result: 1
+(fileserver, ID: 17) INFO: Search for keyword css successful, server returned 10 options.
+(fileserver, ID: 18) INFO: Connected by ('192.168.1.202', 51984)
+(client2) INFO: Connected to server: 192.168.1.224
+(fileserver, ID: 18) INFO: Client host connected: client2.yahavfileserver.home
+(fileserver, ID: 18) INFO: Successfully connected to LDAP server: ldap://yahav.yahavfileserver.home
+(DC) INFO: Connected by ('192.168.1.224', 52142)
+(DC, ID: 18) INFO: Authentication concluded. Result: 1
+(DC, ID: 18) INFO: Administrators has permissions 0xf01bd. Has read access: True, has write access: True.
+(fileserver, ID: 18) INFO: Client client2 is authorized.
+(fileserver, ID: 18) INFO: Search for keyword css successful, server returned 10 options.
+(client3) INFO: Connected to server: 192.168.1.224
+(fileserver, ID: 19) INFO: Connected by ('192.168.1.203', 51054)
+(client4) INFO: Connected to server: 192.168.1.224
+(fileserver, ID: 20) INFO: Connected by ('192.168.1.204', 33506)
+(fileserver, ID: 19) INFO: _______________NEW CONNECTION: client3; COMMAND: REQUEST css; ID: 19______________
+(fileserver, ID: 20) INFO: Client host connected: client4.yahavfileserver.home
+(fileserver, ID: 20) INFO: _______________NEW CONNECTION: client4; COMMAND: REQUEST css; ID: 20______________
+(fileserver, ID: 19) INFO: Successfully connected to LDAP server: ldap://yahav.yahavfileserver.home
+(fileserver, ID: 20) INFO: Successfully connected to LDAP server: ldap://yahav.yahavfileserver.home
+(fileserver, ID: 19) INFO: Client recognized in LDAP server
+(fileserver, ID: 20) INFO: Client recognized in LDAP server
+(fileserver, ID: 19) ERROR: Client not authorized to make request. Exiting.
+(fileserver, ID: 20) ERROR: Client not authorized to make request. Exiting.
+(client3) ERROR: Permission denied. Exiting.
+(client4) ERROR: Permission denied. Exiting.
+(fileserver, ID: 18) INFO: _______________NEW CONNECTION: client2; COMMAND: REQUEST css; ID: 18______________
+(fileserver, ID: 18) INFO: Client recognized in LDAP server
+(fileserver, ID: 19) INFO: Client host connected: client3.yahavfileserver.home
+(fileserver, ID: 17) INFO: Zipped directory sent successfully
 (client1) INFO: Directory unzipped successfully
+(fileserver, ID: 18) INFO: Zipped directory sent successfully
+(client2) INFO: Directory unzipped successfully

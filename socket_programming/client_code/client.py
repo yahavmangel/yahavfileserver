@@ -6,6 +6,7 @@ import zipfile
 import configparser
 import logging
 from loghandler import JSONSocketHandler
+import threading
 
 # logging and metadata
 
@@ -156,11 +157,11 @@ def handle_overwrite(client_socket):
 
     if server_resp == 'OVERWRITE':                                                          # detect overwriting
         while True:
-            user_input = input("File already exists. Overwrite? [y/n] ")                    # prompt user on action
+            user_input = send_prompt("File already exists. Overwrite? [y/n] ", "prompt")                    # prompt user on action
             if user_input == 'n' or user_input == 'y':
                 break
             else:
-                print("Invalid input, try again\n")
+                send_prompt("Invalid input, try again\n", "prompt")
         if user_input == 'n':
             logger.info("Request canceled.")                                    
             send_client_msg(client_socket, "QUIT")                                          # notify server that you quit
@@ -193,7 +194,6 @@ def store_handler(client_socket, filename, target_dir):
                 logger.info("File " + str(filename) + " sent successfully")
         except IOError as e:
             logger.error("Error reading file " + str(filename) + ": " + str(e))
-            # client_socket.close()
             return 
     elif os.path.isdir(filename):
         logger.debug("Result: is a directory")
@@ -234,29 +234,29 @@ def request_handler(client_socket, target_dir):
         json_list = client_socket.recv(BUF_SIZE_LARGE).decode('utf-8')
         options = json.loads(json_list)                                             # decode sent options into local array 
         if (len(options) > 0):                                                      
-            print("Server returned multiple results: \n")
+            send_prompt("Server returned multiple results: \n", "print")
             i = 0
             for option in options: 
                 i += 1
-                print (str(i) + ': ' + option)
-            print (str(i + 1) + ": N/A \n")
+                send_prompt(str(i) + ': ' + option, "print")
+            send_prompt(str(i + 1) + ": N/A \n", "print")
             logger.debug("Waiting for client choice...")
             while True:
-                user_input = input("Which one? ")
+                user_input = send_prompt("Which one? ", "prompt")
                 try: 
                     if(int(user_input) > 0 and int(user_input) < len(options) + 2): 
                         logger.debug("Client chose option #" + user_input)
                         break
                     else: 
-                        print("Invalid choice, try again\n")
+                        send_prompt("Invalid choice, try again\n", "prompt")
                 except ValueError: 
-                    print("Please choose one of the numbers above.")                # case of non-int input
+                    send_prompt("Please choose one of the numbers above.", "print")                # case of non-int input
 
             server_msg = user_input                                                 # send chosen number as server message
             client_socket.sendall(server_msg.encode())                              # send server message 
             if int(user_input) > len(options):                                      # chose N/A option    
                 logger.debug("Client chose N/A option")
-                print("Sorry we couldn't find your file :(")
+                send_prompt("Sorry we couldn't find your file :(", "print")
             else: 
 
                 # handle file request response
@@ -264,7 +264,6 @@ def request_handler(client_socket, target_dir):
                 if not options[int(user_input)-1][-1] == '/':                       # use '/' character appended by server to distinguish between files and dirs. If there is a '/', it is a dir. 
                     logger.debug("Is a file")
                     new_filepath = os.path.join(target_dir, os.path.basename(options[int(user_input)-1]))
-                    print(os.path.basename(new_filepath).split('.')[0] + f' ({i})' + '.' + os.path.basename(new_filepath).split('.')[1])
                     if os.path.exists(new_filepath):                                # check for potential overwrite. If so, add (1), (2), etc. to indicate copy number.
                         for i in range(1, FILE_COPY_LIMIT):                         # bad implementation, but ain't nobody gonna make more than 1 million copies of a file.. right?????
                             if os.path.exists(os.path.join(target_dir, os.path.basename(new_filepath).split('.')[0] + f' ({i})' + '.' + os.path.basename(new_filepath).split('.')[1])):
@@ -340,6 +339,33 @@ def send_client_msg(client_socket, msg):
     """
     logger.debug(str(login_name) + " -> server: " + msg)                            # log each server message in DEBUG log level
     client_socket.sendall(command_table[msg].encode())
+
+def send_prompt(message, type):
+    """
+    Sends a prompt (either input() or print()) to local server)
+
+    Args:
+        message: message to send
+        tye: print or input
+    """
+
+    try: 
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect((local_ip, port2))
+
+        match type: 
+            case "prompt":
+                msg = 'USRINPUT' + message + 'END'
+                sock.sendall(msg.encode('utf-8'))
+                return sock.recv(BUF_SIZE_SMALL).decode('utf-8')                    # wait for prompt response
+            case "print":
+                msg = 'USRPRINT' + message + 'END'
+                sock.sendall(msg.encode('utf-8'))
+                return 1
+        sock.close()
+    except Exception: 
+        logger.critical("localserver unreachable. Exiting.")
+        sys.exit(1)
 
 if __name__ == "__main__":
     server_request(sys.argv[1], sys.argv[2])

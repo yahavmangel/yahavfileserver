@@ -29,11 +29,17 @@ script_dir = os.path.dirname(os.path.abspath(__file__))                         
 
 log_queue = queue.Queue()                                                           # instantiate thread safe log queue
 logger = logging.getLogger("YFS")
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
+
+if logger.hasHandlers():                                                            # remove default handler
+    logger.handlers.clear()
+
 formatter = CustomFormatter()                                                       # set the formatter to the custom one
 file_handler = logging.FileHandler(os.path.join(script_dir, 'YFS.log'), mode='w')   # create default file handler to divert logs to file 
 file_handler.setFormatter(formatter)                                                # associate logger with this handler/formatter
 logger.addHandler(file_handler)
+
+logger.propagate = False
 
 try: 
     config = configparser.ConfigParser()
@@ -46,6 +52,8 @@ except KeyError:                                                                
 # magic numbers 
 
 BUF_SIZE_LARGE = 4096
+MSG_PREFIX_LEN = 3
+MSG_PREFIX2_LEN = 5
 
 # main code
 
@@ -88,20 +96,19 @@ def local_handler(conn):
         if not chunk:
             break
         data += chunk
-        if b'END' in data: 
-            data = data.replace(b'END', b'')                                        # receive logs/user prompts, separating each by 'END' suffix
-            break
-    
-    data = data.decode('utf-8')                                                 
+        messages = data.split(b'END')
+        for message in messages: 
+            message = message.decode('utf-8')
+            match message[:MSG_PREFIX_LEN]:
+                case "LOG":                                                                 # data contained LOG prefix: is a log entry 
+                    log_entry = json.loads(message[MSG_PREFIX_LEN:])
+                    process_log_entry(log_entry)
+                case "USR":                                                                 # data contained USR prefix: is a user prompt 
+                    usr_prompt = message[MSG_PREFIX_LEN:]
+                    process_usr_prompt(usr_prompt, conn)
+        break                                                 
 
-    match data[:3]:
-        case "LOG":                                                                 # data contained LOG prefix: is a log entry 
-            data = data[3:].split('LOG')
-            for msg in data:                                                        # separate and parse each log
-                log_entry = json.loads(msg)
-                process_log_entry(log_entry)
-        case "USR":                                                                 # data contained USR prefix: is a user prompt 
-            pass 
+    
 
     conn.close()
 
@@ -118,6 +125,21 @@ def process_log_entry(log_entry):
     loggerlevelname = log_entry.get('level')
     message = log_entry.get('message')                                              # place in log queue
     log_queue.put((loggerlevelname, message, {'loggername': loggername, 'conn_counter': conn_counter}))
+
+def process_usr_prompt(usr_prompt, conn):
+    """
+    User prompt processing: parses received user prompt and either prints or prompts local console accordingly.  
+    
+    Args:
+        usr_prompt: the received prompt
+        conn: connection to client
+    """
+    match usr_prompt[:MSG_PREFIX2_LEN]:
+        case "INPUT": 
+            to_client = input(usr_prompt[MSG_PREFIX2_LEN:])                         # if input, prompt user 
+            conn.sendall(to_client.encode('utf-8'))                                 # send response back to client 
+        case "PRINT":
+            print(usr_prompt[MSG_PREFIX2_LEN:])                                     # if print, print to console
 
 if __name__ == "__main__":
 
