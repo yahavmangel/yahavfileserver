@@ -6,25 +6,29 @@ import json
 import logging 
 import os
 import sys
+from loghandler import JSONSocketHandler
 
 # logging and metadata
 
-script_dir = os.path.dirname(os.path.abspath(__file__))                             # make script execution dynamic 
-
-logging.basicConfig(level=logging.DEBUG,
-                    format='(%(name)s, ID: %(conn_counter)s) %(levelname)s: %(message)s',  
-                    filemode = 'w',                                                 # overwrites for every execution of script 
-                    filename=os.path.join(script_dir, 'dc.log'))                    
+script_dir = os.path.dirname(os.path.abspath(__file__))                             # make script execution dynamic                  
 
 logger = logging.getLogger("DC")
+logger.setLevel(logging.DEBUG)
 
 try: 
     config = configparser.ConfigParser()
     config.read(os.path.join(script_dir, 'config.ini'))
-    port = int(config['dc']['port'])
+    port = int(config['dc']['port'])                                                # port for connection w/ fileserver 
+    port2 = int(config['dc']['port2'])                                              # port for connection w/ localserver (for logs)
+    local_ip = config['dc']['local_ip']                                             # ip of localserver (for logs)
 except KeyError:                                                                    # check for misconfigured config file 
     logger.critical(f"Missing or misconfigured config file", extra={'conn_counter': "N/A"})
     sys.exit(1)
+
+json_handler = JSONSocketHandler(local_ip, port2)
+json_handler.setLevel(logging.DEBUG)
+json_handler.setFormatter(logging.Formatter('(%(name)s, ID: %(conn_counter)s) %(levelname)s: %(message)s'))
+logger.addHandler(json_handler)
 
 # magic numbers
 
@@ -34,6 +38,16 @@ GENERIC_FILE_WRITE = 0x120116                                                   
 # main code
 
 def auth_code(conn):
+    """
+    Main authentication code: receives nTSecurityDescriptor + list of SIDs to authenticate from server -> parses SecDesc into individual ACEs/permissions -> authenticates against the requested permission.
+    This code must be run on a Windows machine because it uses the win32security api (in my original implementation, I ran it on a Windows Server 2022 Domain Controller)
+    
+    Args:
+        conn: connection of current thread
+    
+    Returns (to server via socket): 
+        Bool: authentication decision (True = Authorized, False = not authorized)
+    """
 
     # receive server authentication request 
 
@@ -47,10 +61,11 @@ def auth_code(conn):
     
     # parse server request message 
     
-    bin_sd, target_permission_bin, sid_list_bin, conn_counter = received.split(delimiter)         # split server msg by delimiter
+    bin_sd, target_permission_bin, sid_list_bin, conn_counter = received.split(delimiter)         
     target_permission = target_permission_bin.decode('utf-8')                   
     sid_list = json.loads(sid_list_bin.decode('utf-8'))
     conn_counter = conn_counter.decode('utf-8')                                     # use for logging 
+
     # main authentication logic
 
     dacl = win32security.SECURITY_DESCRIPTOR(bin_sd).GetSecurityDescriptorDacl()    # fetch DACL out of the client's security descriptor 

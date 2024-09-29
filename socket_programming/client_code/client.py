@@ -5,28 +5,32 @@ import os
 import zipfile
 import configparser
 import logging
+from loghandler import JSONSocketHandler
 
 # logging and metadata
 
 script_dir = os.path.dirname(os.path.abspath(__file__))                                     # make script execution dynamic 
 login_name = os.getlogin()
 
-logging.basicConfig(level=logging.DEBUG,
-                    format='(%(name)s) %(levelname)s: %(message)s',                         
-                    filemode = 'w',                                                         # script overwrites for each new request 
-                    filename=os.path.join(script_dir, f'{login_name}.log'))
-
 logger = logging.getLogger(login_name)
+logger.setLevel(logging.DEBUG)
 
 try:                                                                                        # collect config file info 
     config = configparser.ConfigParser()
     config.read(os.path.join(script_dir, 'config.ini'))
-    server_ip = config['client']['server_ip']
-    port = int(config['client']['port'])
-    target_dir = os.path.join(script_dir, config['client']['target_dir'])
+    server_ip = config['client']['server_ip']                                               # ip of fileserver
+    local_ip = config['client']['local_ip']                                                 # ip of localserver (for logs/user prompts)
+    port = int(config['client']['port'])                                                    # port for connection with fileserver
+    port2 = int(config['client']['port2'])                                                  # port for connection with localserver (for logs/user prompts)
+    target_dir = os.path.join(script_dir, config['client']['target_dir'])                   # target directory of operations 
 except KeyError:                                                                            # check for misconfigured config file 
     logger.critical(f"Missing or misconfigured config file")    
     sys.exit(1) 
+
+json_handler = JSONSocketHandler(local_ip, port2)
+json_handler.setLevel(logging.DEBUG)
+json_handler.setFormatter(logging.Formatter('(%(name)s) %(levelname)s: %(message)s'))
+logger.addHandler(json_handler)
 
 command_table = { 
 
@@ -60,6 +64,13 @@ FILE_COPY_LIMIT = 1000000
 # main code 
 
 def server_request(command, filename):
+    """
+    Launches the server request.
+
+    Args:
+        command: client requested command (STORE, REQUEST, etc.)
+        filename: the file name or similar key word that the operation is executed on
+    """
 
     try: 
 
@@ -113,7 +124,7 @@ def server_request(command, filename):
                     break
             if server_resp == 'AUTHS': 
                 logger.debug("Received authorization from server")                          # auth success: handle request 
-                request_handler(client_socket, filename, target_dir)
+                request_handler(client_socket, target_dir)
             elif server_resp == 'AUTHF':                                                    # auth fail: rejct request 
                 logger.error("Permission denied. Exiting.")
                 return
@@ -127,7 +138,15 @@ def server_request(command, filename):
 
 
 def handle_overwrite(client_socket):
+    """
+    Handles the case of overwrite (occurs when a STORE would overwrite a preexisting file on the server) by asking client whether they want to proceed or not.
 
+    Args:
+        client_socket: the socket holding the connection with the server. 
+    
+    Returns: 
+        Bool: outcome of client decision (True = Ok, False = Stop)
+    """
     while True: 
         server_resp = client_socket.recv(BUF_SIZE_SMALL).decode('utf-8')                    # collect initial response from server 
         if (server_resp == 'OVERWRITE') or (server_resp == 'READY'): 
@@ -145,7 +164,6 @@ def handle_overwrite(client_socket):
         if user_input == 'n':
             logger.info("Request canceled.")                                    
             send_client_msg(client_socket, "QUIT")                                          # notify server that you quit
-            client_socket.close()                                                   
             return False
         elif user_input == 'y':
             logger.info("Acknowledged overwrite")
@@ -155,6 +173,14 @@ def handle_overwrite(client_socket):
     else: return True
 
 def store_handler(client_socket, filename, target_dir):
+    """
+    Handles main workflow of STORE command: sends file/directory to server.
+
+    Args:
+        client_socket: the socket holding the connection with the server. 
+        filename: name of file to store. 
+        target_dir: directory to grab file/dir from 
+    """
 
     logger.debug("Checking if " + str(filename) + " is a file or a directory...")
     if os.path.isfile(filename):
@@ -163,11 +189,11 @@ def store_handler(client_socket, filename, target_dir):
         try: 
             with open(filename, 'rb') as file:
                 while chunk := file.read(BUF_SIZE_LARGE):
-                    client_socket.sendall(chunk)                                            # Send all the data
+                    client_socket.sendall(chunk)                                                                    # Send all the data
                 logger.info("File " + str(filename) + " sent successfully")
         except IOError as e:
             logger.error("Error reading file " + str(filename) + ": " + str(e))
-            client_socket.close()
+            # client_socket.close()
             return 
     elif os.path.isdir(filename):
         logger.debug("Result: is a directory")
@@ -190,7 +216,15 @@ def store_handler(client_socket, filename, target_dir):
     else: 
         logger.error("The file or directory you requested to store does not exist. Exiting.")                       # case of invalid file name
 
-def request_handler(client_socket, filename, target_dir):
+def request_handler(client_socket, target_dir):
+    """
+    Handles main workflow of REQUEST command: wait for server options -> prompt user to choose -> send choice to server -> receive requested file from server 
+
+    Args:
+        client_socket: the socket holding the connection with the server. 
+        filename: name of file to store. 
+        target_dir: directory to grab file/dir from 
+    """
 
     wait_for_server_resp(client_socket, "READY")                                    # check that server is ready for request
     try: 
@@ -247,7 +281,6 @@ def request_handler(client_socket, filename, target_dir):
                             logger.info("File received successfully")
                     except IOError as e:
                         logger.error("Error reading file " + str(new_filepath) + ": " + str(e))
-                        client_socket.close()
                         return 
 
                 # handle directory request response 
@@ -283,6 +316,13 @@ def request_handler(client_socket, filename, target_dir):
 # helper functions
 
 def wait_for_server_resp(client_socket, resp):                                      # helper function that polls for specific server response
+    """
+    Polls for a server response, and breaks once it is received. Logs the received message.
+
+    Args:
+        client_socket: the socket holding the connection with the server. 
+        resp: desired response from server 
+    """
     resp_len = len(resp)
     while True:
         server_resp = client_socket.recv(resp_len).decode('utf-8')
@@ -290,9 +330,16 @@ def wait_for_server_resp(client_socket, resp):                                  
             logger.debug("Received message from server: " + resp)
             break
 
-def send_client_msg(conn, msg):
+def send_client_msg(client_socket, msg):
+    """
+    Sends a message to the server and logs it.
+
+    Args:
+        client_socket: the socket holding the connection with the server. 
+        msg: desired message to server 
+    """
     logger.debug(str(login_name) + " -> server: " + msg)                            # log each server message in DEBUG log level
-    conn.sendall(command_table[msg].encode())
+    client_socket.sendall(command_table[msg].encode())
 
 if __name__ == "__main__":
     server_request(sys.argv[1], sys.argv[2])

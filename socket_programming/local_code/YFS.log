@@ -1,0 +1,44 @@
+(DC) INFO: DC is listening...
+(fileserver, ID: 0) INFO: Server is listening...
+(fileserver, ID: 1) INFO: Connected by ('192.168.1.201', 49900)
+(fileserver, ID: 1) INFO: Client host connected: client1.yahavfileserver.home
+(client1) INFO: Connected to server: 192.168.1.224
+(fileserver, ID: 1) DEBUG: Connecting to LDAP server: ldap://yahav.yahavfileserver.home
+(fileserver, ID: 1) INFO: _______________NEW CONNECTION: client1; COMMAND: REQUEST css; ID: 1______________
+(fileserver, ID: 1) DEBUG: Searching for client in LDAP server...
+(fileserver, ID: 1) CRITICAL: Error connecting to LDAP server. Ensure you have a valid Kerberos ticket.
+(fileserver, ID: 1) ERROR: Unrecognized connection. Exiting.
+(fileserver, ID: 0) INFO: Server is listening...
+(fileserver, ID: 1) INFO: Connected by ('192.168.1.201', 40512)
+(fileserver, ID: 1) INFO: Client host connected: client1
+(client1) INFO: Connected to server: 192.168.1.224
+(fileserver, ID: 1) DEBUG: Connecting to LDAP server: ldap://yahav.yahavfileserver.home
+(fileserver, ID: 1) INFO: _______________NEW CONNECTION: client1; COMMAND: REQUEST css; ID: 1______________
+(fileserver, ID: 1) DEBUG: Searching for client in LDAP server...
+(fileserver, ID: 1) INFO: Successfully connected to LDAP server: ldap://yahav.yahavfileserver.home
+(fileserver, ID: 1) DEBUG: verifying permissions for client client1...
+(fileserver, ID: 1) INFO: Client recognized in LDAP server
+(fileserver, ID: 1) DEBUG: Scanning for client client1 group membership...
+(fileserver, ID: 1) DEBUG: Initiating connection with DC for authorization...
+(fileserver, ID: 1) DEBUG: client1 is a member of the Administrators security group
+(DC) INFO: Connected by ('192.168.1.224', 59202)
+(DC, ID: 1) INFO: Administrators has permissions 0xf01bf. Has read access: True, has write access: True.
+(DC, ID: 1) INFO: Authentication concluded. Result: 1
+(fileserver, ID: 1) DEBUG: Received message from DC: AUTHS
+(fileserver, ID: 1) DEBUG: server -> client1: AUTHSUCCESS
+(fileserver, ID: 1) INFO: Client client1 is authorized.
+(fileserver, ID: 1) DEBUG: server -> client1: READY
+(fileserver, ID: 1) DEBUG: Searching directory: /home/fileserver/server-code/../files. Search keyword is: css
+(client1) DEBUG: Received authorization from server
+(client1) DEBUG: Received message from server: READY
+(client1) DEBUG: Waiting for server search results...
+(fileserver, ID: 1) DEBUG: server -> client1: OPTIONS
+(fileserver, ID: 1) INFO: Search for keyword css successful, server returned 10 options.
+(client1) DEBUG: Received message from server: OPTIONS
+(client1) DEBUG: Results received.
+(client1) DEBUG: Waiting for client choice...
+(fileserver, ID: 1) INFO: Zipped directory sent successfully
+(client1) DEBUG: Client chose option #7
+(client1) DEBUG: Checking if result is a file or directory...
+(client1) DEBUG: Is a directory
+(client1) INFO: Directory unzipped successfully

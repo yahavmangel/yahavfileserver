@@ -5,33 +5,38 @@ import threading
 import zipfile
 import configparser
 from difflib import get_close_matches
-from ldap3 import Server, Connection, ALL, SASL, GSSAPI
 import logging 
 import sys 
+from auth import *
+from loghandler import JSONSocketHandler
 
 # logging and metadata
 
 login_name = os.getlogin()                                                                          # base logging and ID based on login
 script_dir = os.path.dirname(os.path.abspath(__file__))                                             # make script execution dynamic
-logging.basicConfig(level=logging.DEBUG,
-                    format='(%(name)s, ID: %(conn_counter)s) %(levelname)s: %(message)s',
-                    filemode = 'w',                                                                 # log overwrites for every new script 
-                    filename=os.path.join(script_dir, f'{login_name}.log'))
 
-logger = logging.getLogger(login_name)                                                              
+logger = logging.getLogger(login_name)
+logger.setLevel(logging.DEBUG)
 
 try:                                                                                                # collect config file info
     config = configparser.ConfigParser()                                                                
     config.read(os.path.join(script_dir, 'config.ini'))
-    port = int(config['server']['port'])
-    port2 = int(config['server']['port2'])
-    domain_controller = config['server']['domain_controller']
-    domain_controller_ip = config['server']['domain_controller_ip']
-    target_dir = os.path.join(script_dir, config['server']['target_dir'])
+    port = int(config['server']['port'])                                                            # port for connection with clients
+    port2 = int(config['server']['port2'])                                                          # port for connection with DC (for auth)
+    port3 = int(config['server']['port3'])                                                          # port for connection with localserver (for logs)
+    domain_controller = config['server']['domain_controller']                                       # FQDN of DC
+    domain_controller_ip = config['server']['domain_controller_ip']                                 # ip of DC  
+    local_ip = config['server']['local_ip']                                                         # ip of localserver
+    target_dir = os.path.join(script_dir, config['server']['target_dir'])                           # target directory of operations
 except KeyError:                                                                                    
     logger.critical(f"Missing or misconfigured config file", extra={'conn_counter': "N/A"})
     sys.exit(1)                                                                                     # stops script execution w/o key info 
 dc_array = domain_controller.split('.')[1:]
+
+json_handler = JSONSocketHandler(local_ip, port3)
+json_handler.setLevel(logging.DEBUG)
+json_handler.setFormatter(logging.Formatter('(%(name)s, ID: %(conn_counter)s) %(levelname)s: %(message)s'))
+logger.addHandler(json_handler)
 
 command_table = { 
 
@@ -59,7 +64,6 @@ NUM_CLIENT_COMMANDS = 2
 NUM_INTERNAL_COMMANDS = 7
 BUF_SIZE_SMALL = 1024
 BUF_SIZE_LARGE = 4096
-SEC_GROUP_BITMASK = 0x80000000
 
 # file search params 
 
@@ -74,6 +78,13 @@ global_dict_lock = threading.Lock()                                             
 # main code 
 
 def client_handler(conn, conn_counter):
+    """
+    Handles a client connection to the server (individual client thread): receives client's message -> requests DC to authenticate client -> handles client request
+
+    Args:
+        conn: connection point to client 
+        conn_counter: current connection ID (for logging)
+    """
 
     try: 
 
@@ -81,7 +92,7 @@ def client_handler(conn, conn_counter):
 
         try: 
             hostname, alias, ip_addresses = socket.gethostbyaddr(addr[0])                           # reverse DNS lookup on ip address to get hostname
-            logger.info("Client host connected: " + str(hostname), extra={'conn_counter': "N/A"})
+            logger.info("Client host connected: " + str(hostname), extra={'conn_counter': conn_counter})
         except socket.herror: 
             logger.critical("DNS server offline. Quitting.", extra={'conn_counter': "N/A"})
             conn.close()
@@ -137,11 +148,21 @@ def client_handler(conn, conn_counter):
 
 
 def handle_store(conn, filename, client_dir, client_name, conn_counter):
+    """
+    Handles a client STORE request: checks for overwrite -> receives client's file/dir
+
+    Args:
+        conn: connection point to client 
+        filename: name of file to store
+        client_dir: directory of client (to be allocated, or already exists) on the fileserver's file system
+        client_name: name of client making the request 
+        conn_counter: current connection ID (for logging)
+    """
 
     # check for overwrite
 
     basename = os.path.basename(filename)
-    if basename == '': basename = os.path.basename(filename[:-1])
+    if basename == '': basename = os.path.basename(filename[:-1])                                   # weird edge case for dirs
 
     if os.path.exists(os.path.join(client_dir, basename)): 
         logger.warning("Overwrite detected. Notifying client...", extra={'conn_counter': conn_counter})
@@ -213,6 +234,15 @@ def handle_store(conn, filename, client_dir, client_name, conn_counter):
             os.remove(tempfilename)                                                         # remove temp zip file. 
     
 def handle_request(conn, filename, client_name, conn_counter):
+    """
+    Handles a client REQUEST request: performs search of filesystem -> sends user options -> receives user choice -> sends file/dir to client 
+
+    Args:
+        conn: connection point to client 
+        filename: name of requested file (key word, not exact path)
+        client_name: name of client making the request 
+        conn_counter: current connection ID (for logging)
+    """
 
     send_server_msg(conn, 'READY', client_name, conn_counter)
     json_list = json.dumps(similarity_search(target_dir, filename, conn_counter))           # call search algorithm and send result to client
@@ -269,6 +299,18 @@ def handle_request(conn, filename, client_name, conn_counter):
 # helper functions
 
 def similarity_search(dir_name, keyword, conn_counter):
+    """
+    Helper function that searches the filesystem of the server (for REQUEST command). Uses fuzzy search (idk what that is tbh)
+
+    Args:
+        dir_name: name of directory on server's filesystem to serch  
+        keyword: key word to search against 
+        conn_counter: current connection ID (for logging)
+    
+    Returns: 
+        Array of matches returned by the search 
+    """
+
     logger.debug("Searching directory: " + str(dir_name) + ". Search keyword is: " + str(keyword), extra={'conn_counter': conn_counter})
     file_dict = {}                          
     for root, dirs, files in os.walk(dir_name):                                                                             # walk through all files in server, adding their base names to a dictionary.                                              
@@ -283,127 +325,32 @@ def similarity_search(dir_name, keyword, conn_counter):
     return [match for match, base_name in file_dict.items() if base_name in matches]                                        # return all matches' full file name in an array
         
 def get_file_lock(filename):
+    """
+    Handles a client STORE request: checks for overwrite -> receives client's file/dir
+
+    Args:
+        filename: name of file or directory to protect with a lock 
+    
+    Returns: 
+        A new lock for the file/directory 
+    """
+
     with global_dict_lock:
         if filename not in file_lock_dict:
             file_lock_dict[filename] = threading.Lock()
         return file_lock_dict[filename]
-    
-def check_ldap_auth(ldap_conn, username, perm, conn_counter):
-
-    logger.debug("verifying permissions for client " + str(username) + "...", extra={'conn_counter': conn_counter})
-
-    # query #1: get DN and nTSecurityDescriptor of client 
-
-    entries = get_ldap_user_info(ldap_conn, username, ['distinguishedName', 'nTSecurityDescriptor'])                        # return both their full DN and their security descriptor
-    
-    if entries: 
-        user_dn = entries[0].distinguishedName.value
-        bin_sd = entries[0].ntSecurityDescriptor.raw_values[0]                                                              # get binary data of security descriptor 
-        
-        # query #2: get all groups that the client is member of
-
-        domain_dn = construct_dn('')
-
-        logger.debug("Scanning for client " + str(username) + " group membership...", extra={'conn_counter': conn_counter})
-        ldap_conn.search(search_base=domain_dn,                                                                             
-                         search_filter=f'(&(objectCategory=group)(member={user_dn}))',                                      # look for groups that the client is a member of, as they will contain the permissions which the user will inherit
-                         attributes=['cn', 'groupType', 'objectSid'])                                                       # return important data about each group
-        
-        if ldap_conn.entries:
-            groups_to_check = []                                                                                            # list of SIDs to be sent to the domain controller for permission checking
-            for entry in ldap_conn.entries: 
-                if((entry.groupType.value & SEC_GROUP_BITMASK) != 0):                                                       # check if the group is a security group (not a distribution group)
-                    logger.debug(str(username) + " is a member of the " + str(entry.cn.value) + " security group", extra={'conn_counter': conn_counter})
-                    groups_to_check.append(entry.objectSid.value)                                                           # add SID of security group to the list
-            return bool(auth_request(bin_sd, perm, groups_to_check, conn_counter))                                          # send authentication request to domain controller, and return result to main code
-        
-        else: 
-            logger.debug("Client " + str(username) + " is not member of any security group.", extra={'conn_counter': conn_counter})
-            return False                                                                                                    # edge case: client is not a member of any group
-    
-    else:
-        logger.debug("Client " + str(username) + " was not found in LDAP server.", extra={'conn_counter': conn_counter}) 
-        return False                                                                                                        # edge case: client does not exist in domain
-
-def auth_request(security_desc, target_permission, sid_list, conn_counter):
-
-    logger.debug("Initiating connection with DC for authorization...", extra={'conn_counter': conn_counter})
-    
-    # set up socket connection with DC
-    
-    dc_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    dc_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    try: 
-        dc_socket.settimeout(10)
-        dc_socket.connect((domain_controller_ip, port2))
-    except socket.error:
-        logger.critical(f"Failed to connect to DC", extra={'conn_counter': conn_counter})
-        return False
-    except socket.timeout:
-        logger.critical("Connection timed out. DC unreachable.", extra={'conn_counter': conn_counter})
-        return
-                                                                                                    
-    # Convert binary data to bytes and combine everything into a single message. 
-
-    delimiter = b'\x1F'                                                                                 # This delimiter will not show up in any misc binary data.
-    server_msg = delimiter.join([
-        security_desc,
-        target_permission.encode('utf-8'),
-        json.dumps(sid_list).encode('utf-8'),
-        str(conn_counter).encode('utf-8')                                                               # pass conn ID to DC for its own logging
-    ])
-
-    # send information to the domain controller for processing 
-     
-    dc_socket.sendall(server_msg)                                                                       # send server message to DC                                        
-    dc_socket.shutdown(socket.SHUT_WR)                                                                  # force all buffered data to send (weird bug fix)
-    wait_for_server_resp(dc_socket, command_table['AUTHSUCCESS'], "DC", conn_counter)
-    resp = int(dc_socket.recv(1).decode('utf-8'))                                                       # DC will return a 1 or 0, 1 is authorized, 0 is not. 
-    dc_socket.close()
-    return resp                                                                                         # return DC's authentication result to main code 
-
-def initiate_ldap_conn(conn_counter):                                                                   # get DN of full domain
-    ldap_server = f'ldap://{domain_controller}'   
-    logger.debug("Connecting to LDAP server: " + str(ldap_server), extra={'conn_counter': conn_counter})       
-    try:                                                                    
-        server = Server(ldap_server, get_info=ALL)                                                      # Connect to the LDAP server using GSSAPI (Kerberos) authentication
-        ldap_conn = Connection(server, authentication=SASL, sasl_mechanism=GSSAPI)    
-        ldap_conn.bind()   
-    except Exception: 
-        logger.critical("Error connecting to LDAP server. Ensure you have a valid Kerberos ticket.", extra={'conn_counter': conn_counter})
-        return 
-    logger.info("Successfully connected to LDAP server: " + str(ldap_server), extra={'conn_counter': conn_counter})
-    return ldap_conn
-
-def get_ldap_user_info(ldap_conn, username, attributes):                                                # query to collect attributes from a given user/computer account 
-    domain_dn = construct_dn('')
-    try: 
-        ldap_conn.search(search_base=domain_dn,                                                         # this query works on either user or computer accounts (using AND/OR syntax)
-                        search_filter=f'(|(&(objectClass=user)(|(cn={username})(sAMAccountName={username})))(&(objectClass=computer)(cn={username})))',
-                        attributes=attributes)
-    except Exception:
-        return 
-
-    return ldap_conn.entries
-
-def construct_dn(basename):                                                                             # helper function to construct distinguishedName of particular object in domain. 
-
-    for i in range(0, len(dc_array)):
-        basename += ('DC=' + dc_array[i])
-        if i < len(dc_array) - 1:
-            basename += ','
-    return basename
-
-def wait_for_server_resp(dc_socket, resp, client_name, conn_counter):                                   # helper function that polls for specific server response
-    resp_len = len(resp)
-    while True:
-        server_resp = dc_socket.recv(resp_len).decode('utf-8')
-        if resp in server_resp and resp in command_table.values():
-            logger.debug("Received message from " + str(client_name) + ": " + resp, extra={'conn_counter': conn_counter})
-            break
 
 def send_server_msg(conn, msg, client_name, conn_counter):
-    logger.debug("server -> " + str(client_name) + ": " + msg, extra={'conn_counter': conn_counter})    # log each server message in debug level of logger 
+    """
+    Sends a message to a client and logs it. 
+
+    Args:
+        conn: connection point to client 
+        msg: message to send to client
+        client_name: name of client to send message to 
+        conn_counter: current connection ID (for logging)
+    """
+    logger.debug("server -> " + str(client_name) + ": " + msg, extra={'conn_counter': conn_counter})                        # log each server message in debug level of logger 
     conn.sendall(command_table[msg].encode())
 
 # main loop 
@@ -422,8 +369,8 @@ if __name__ == "__main__":
     logger.info("Server is listening...", extra={'conn_counter': conn_counter})
 
     while True:
-        conn, addr = server_socket.accept()                                                             # every time a connection is accepted by server, make a new thread
-        logger.info("Connected by " + str(addr), extra={'conn_counter': "N/A"})
-        conn_counter += 1                                                                               # increment connection ID every time, passing it to thread for logging.
+        conn, addr = server_socket.accept()                                                                                 # every time a connection is accepted by server, make a new thread
+        conn_counter += 1                                                                                                   # increment connection ID every time, passing it to thread for logging.
+        logger.info("Connected by " + str(addr), extra={'conn_counter': conn_counter})
         client_thread = threading.Thread(target=client_handler, args=(conn,conn_counter))
         client_thread.start()
