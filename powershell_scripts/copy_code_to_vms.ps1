@@ -29,6 +29,6 @@ Write-Host "yahavgaming123"
 
 foreach ($vm in $clients) {
     scp "$PSScriptRoot\..\socket_programming\client_code\client.py" "$($vm.User)@$($vm.IP):$($vm.ScriptPath)"
-    # scp "$PSScriptRoot\..\socket_programming\client_code\config.ini" "$($vm.User)@$($vm.IP):$($vm.ScriptPath2)"
-    # scp "$PSScriptRoot\..\socket_programming\client_code\loghandler.py" "$($vm.User)@$($vm.IP):$($vm.ScriptPath3)"
+    scp "$PSScriptRoot\..\socket_programming\client_code\config.ini" "$($vm.User)@$($vm.IP):$($vm.ScriptPath2)"
+    scp "$PSScriptRoot\..\socket_programming\client_code\loghandler.py" "$($vm.User)@$($vm.IP):$($vm.ScriptPath3)"
 }
