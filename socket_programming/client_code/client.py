@@ -1,3 +1,15 @@
+"""
+Execute and manage a client request to the fileserver. 
+
+Functions: 
+    server_request(command, filename)
+    handle_overwrite(client_socket)
+    store_handler(client_socket, filename, target_dir)
+    request_handler(client_socket, target_dir)
+    wait_for_server_resp(client_socket, resp)
+    send_client_msg(client_socket, msg)
+    send_prompt(message, prompt_type)
+"""
 import socket
 import sys
 import json
@@ -6,7 +18,6 @@ import zipfile
 import configparser
 import logging
 from loghandler import JSONSocketHandler
-import threading
 
 # logging and metadata
 
@@ -25,7 +36,7 @@ try:                                                                            
     port2 = int(config['client']['port2'])                                                  # port for connection with localserver (for logs/user prompts)
     target_dir = os.path.join(script_dir, config['client']['target_dir'])                   # target directory of operations 
 except KeyError:                                                                            # check for misconfigured config file 
-    logger.critical(f"Missing or misconfigured config file")    
+    logger.critical("Missing or misconfigured config file")    
     sys.exit(1) 
 
 json_handler = JSONSocketHandler(local_ip, port2)
@@ -77,8 +88,8 @@ def server_request(command, filename):
 
         # input validation
     
-        if not (command == 'STORE' or command == 'REQUEST'):
-            logger.error("Invalid command")
+        if command not in ['STORE', 'REQUEST']:
+            logger.error("Invalid command: %s", command)
             return 
         
         # connection setup
@@ -92,7 +103,7 @@ def server_request(command, filename):
             except socket.timeout:
                 logger.critical("Connection timed out. Server unreachable.")
                 return
-            logger.info("Connected to server: " + server_ip)
+            logger.info("Connected to server: %s", server_ip)
             server_msg = f"{os.getlogin()}|{command}|{filename}"                            # send client username, command, and file name to server for processing
             client_socket.sendall(server_msg.encode())                                      # send server message 
         except socket.gaierror:
@@ -105,13 +116,14 @@ def server_request(command, filename):
 
             while True: 
                 server_resp = client_socket.recv(AUTH_RESP_LEN).decode('utf-8')             # wait for server authentication response
-                if (server_resp[:-1] == 'AUTH'):                                            # could be either auth success or fail 
+                if server_resp[:-1] == 'AUTH':                                            # could be either auth success or fail 
                     break
             if server_resp == 'AUTHS':                                                      # auth success: handle request 
                 logger.debug("Received authorization from server")
                 status = handle_overwrite(client_socket)
-                if not status: return                                                       # either no overwrite, or chose to proceed
-                else: store_handler(client_socket, filename, target_dir)                       
+                if not status: 
+                    return                                                       # either no overwrite, or chose to proceed
+                store_handler(client_socket, filename, target_dir)                       
             elif server_resp == 'AUTHF':                                                    # auth fail: reject request
                 logger.error("Permission denied. Exiting.")
                 return
@@ -121,7 +133,7 @@ def server_request(command, filename):
             
             while True: 
                 server_resp = client_socket.recv(AUTH_RESP_LEN).decode('utf-8')             # wait for server authentication response
-                if ('AUTH' in server_resp):
+                if 'AUTH' in server_resp:
                     break
             if server_resp == 'AUTHS': 
                 logger.debug("Received authorization from server")                          # auth success: handle request 
@@ -150,28 +162,27 @@ def handle_overwrite(client_socket):
     """
     while True: 
         server_resp = client_socket.recv(BUF_SIZE_SMALL).decode('utf-8')                    # collect initial response from server 
-        if (server_resp == 'OVERWRITE') or (server_resp == 'READY'): 
+        if server_resp in ['OVERWRITE', 'READY']: 
             break
     
     # handle file overwriting case
 
     if server_resp == 'OVERWRITE':                                                          # detect overwriting
         while True:
-            user_input = send_prompt("File already exists. Overwrite? [y/n] ", "prompt")                    # prompt user on action
-            if user_input == 'n' or user_input == 'y':
+            user_input = send_prompt("File already exists. Overwrite? [y/n] ", "prompt")    # prompt user on action
+            if user_input in ['n', 'y']:
                 break
-            else:
-                send_prompt("Invalid input, try again\n", "prompt")
+            send_prompt("Invalid input, try again\n", "prompt")
         if user_input == 'n':
             logger.info("Request canceled.")                                    
             send_client_msg(client_socket, "QUIT")                                          # notify server that you quit
             return False
-        elif user_input == 'y':
+        if user_input == 'y':
             logger.info("Acknowledged overwrite")
             send_client_msg(client_socket, "ACK")                                           # notify server that you acknowledge overwrite
             wait_for_server_resp(client_socket, "READY")                                    # check that server is ready AFTER overwrite
             return True                
-    else: return True
+    return True
 
 def store_handler(client_socket, filename, target_dir):
     """
@@ -183,7 +194,7 @@ def store_handler(client_socket, filename, target_dir):
         target_dir: directory to grab file/dir from 
     """
 
-    logger.debug("Checking if " + str(filename) + " is a file or a directory...")
+    logger.debug("Checking if %s is a file or a directory...", filename)
     if os.path.isfile(filename):
         logger.debug("Result: is a file")
         send_client_msg(client_socket, "STOREFILE")
@@ -191,9 +202,9 @@ def store_handler(client_socket, filename, target_dir):
             with open(filename, 'rb') as file:
                 while chunk := file.read(BUF_SIZE_LARGE):
                     client_socket.sendall(chunk)                                                                    # Send all the data
-                logger.info("File " + str(filename) + " sent successfully")
+                logger.info("File %s sent successfully", filename)
         except IOError as e:
-            logger.error("Error reading file " + str(filename) + ": " + str(e))
+            logger.error("Error reading file %s: %s", filename, e)
             return 
     elif os.path.isdir(filename):
         logger.debug("Result: is a directory")
@@ -204,14 +215,14 @@ def store_handler(client_socket, filename, target_dir):
                     filepath = os.path.join(root, file)
                     arcname = os.path.relpath(filepath, start=os.path.join(os.path.join(target_dir, filename)))     # use relative path to maintain correct directory structure
                     temp_zip.write(filepath, arcname=arcname)
-                for dir in dirs:                                                                                    # add every subdirectory to zip archive
-                    dirpath = os.path.join(root, dir)
+                for dire in dirs:                                                                                    # add every subdirectory to zip archive
+                    dirpath = os.path.join(root, dire)
                     arcname = os.path.relpath(dirpath, start=os.path.join(os.path.join(target_dir, filename)))      # use relative path to maintain correct directory structure
                     temp_zip.write(dirpath, arcname=arcname)
-        with open(filename + '.zip', 'rb') as zip: 
-            while chunk := zip.read(BUF_SIZE_LARGE):
+        with open(filename + '.zip', 'rb') as zipFile: 
+            while chunk := zipFile.read(BUF_SIZE_LARGE):
                 client_socket.sendall(chunk)
-            logger.info("The " + filename + " directory was zipped and sent successfully")
+            logger.info("The %s directory was zipped and sent successfully", filename)
         os.remove(filename + '.zip')  
     else: 
         logger.error("The file or directory you requested to store does not exist. Exiting.")                       # case of invalid file name
@@ -233,7 +244,7 @@ def request_handler(client_socket, target_dir):
         logger.debug("Results received.")                                           # wait for server to return search options
         json_list = client_socket.recv(BUF_SIZE_LARGE).decode('utf-8')
         options = json.loads(json_list)                                             # decode sent options into local array 
-        if (len(options) > 0):                                                      
+        if len(options) > 0:                                                      
             send_prompt("Server returned multiple results: \n", "print")
             i = 0
             for option in options: 
@@ -245,12 +256,11 @@ def request_handler(client_socket, target_dir):
                 user_input = send_prompt("Which one? ", "prompt")
                 try: 
                     if(int(user_input) > 0 and int(user_input) < len(options) + 2): 
-                        logger.debug("Client chose option #" + user_input)
+                        logger.debug("Client chose option #%s", user_input)
                         break
-                    else: 
-                        send_prompt("Invalid choice, try again\n", "prompt")
+                    send_prompt("Invalid choice, try again\n", "prompt")
                 except ValueError: 
-                    send_prompt("Please choose one of the numbers above.", "print")                # case of non-int input
+                    send_prompt("Please choose one of the numbers above.", "print") # case of non-int input
 
             server_msg = user_input                                                 # send chosen number as server message
             client_socket.sendall(server_msg.encode())                              # send server message 
@@ -279,7 +289,7 @@ def request_handler(client_socket, target_dir):
                                 file.write(data)
                             logger.info("File received successfully")
                     except IOError as e:
-                        logger.error("Error reading file " + str(new_filepath) + ": " + str(e))
+                        logger.error("Error reading file %s: %s", new_filepath, e)
                         return 
 
                 # handle directory request response 
@@ -326,7 +336,7 @@ def wait_for_server_resp(client_socket, resp):                                  
     while True:
         server_resp = client_socket.recv(resp_len).decode('utf-8')
         if resp in server_resp and resp in command_table.values():
-            logger.debug("Received message from server: " + resp)
+            logger.debug("Received message from server: %s", resp)
             break
 
 def send_client_msg(client_socket, msg):
@@ -337,10 +347,10 @@ def send_client_msg(client_socket, msg):
         client_socket: the socket holding the connection with the server. 
         msg: desired message to server 
     """
-    logger.debug(str(login_name) + " -> server: " + msg)                            # log each server message in DEBUG log level
+    logger.debug("%s -> server: %s", login_name, msg)                            # log each server message in DEBUG log level
     client_socket.sendall(command_table[msg].encode())
 
-def send_prompt(message, type):
+def send_prompt(message, prompt_type):
     """
     Sends a prompt (either input() or print()) to local server)
 
@@ -353,7 +363,7 @@ def send_prompt(message, type):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.connect((local_ip, port2))
 
-        match type: 
+        match prompt_type: 
             case "prompt":
                 msg = 'USRINPUT' + message + 'END'
                 sock.sendall(msg.encode('utf-8'))

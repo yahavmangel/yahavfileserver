@@ -1,12 +1,21 @@
+"""
+Run Authentication service: 
+- use win32security API to parse incoming clients' security descriptor
+- Authenticate against desired permission at the granular permission level.
+See reposity README for more information. 
+
+Functions: 
+    auth_code(conn)
+"""
 import socket
-import win32security
 import configparser
 import threading
 import json
-import logging 
+import logging
 import os
 import sys
 from loghandler import JSONSocketHandler
+import win32security
 
 # logging and metadata
 
@@ -22,7 +31,7 @@ try:
     port2 = int(config['dc']['port2'])                                              # port for connection w/ localserver (for logs)
     local_ip = config['dc']['local_ip']                                             # ip of localserver (for logs)
 except KeyError:                                                                    # check for misconfigured config file 
-    logger.critical(f"Missing or misconfigured config file", extra={'conn_counter': "N/A"})
+    logger.critical("Missing or misconfigured config file", extra={'conn_counter': "N/A"})
     sys.exit(1)
 
 json_handler = JSONSocketHandler(local_ip, port2)
@@ -74,20 +83,23 @@ def auth_code(conn):
         ace = dacl.GetAce(i)
         ace_sid = ace[2]                                                            # grab SID of current ACE
         try:                                                                        # this filters out non-SID objects 
-            sid_name, domain, _type = win32security.LookupAccountSid(None, ace_sid)
-        except: continue
-        if(win32security.ConvertSidToStringSid(ace_sid) in sid_list):               # if the current ACE is associated with a SID that we care about
+            sid_name, _, _ = win32security.LookupAccountSid(None, ace_sid)
+        except Exception: 
+            continue
+        if win32security.ConvertSidToStringSid(ace_sid) in sid_list:               # if the current ACE is associated with a SID that we care about
             permissions = ace[1]                                                    # grab access mask of current ACE
-            logger.info(str(sid_name) + " has permissions " + str(hex(permissions)) + ". Has read access: " + str(bool((permissions & GENERIC_FILE_READ))) + ", has write access: " + str(bool((permissions & GENERIC_FILE_WRITE))) + ".", extra={'conn_counter': conn_counter})
+            logger.info("%s has permissions %s. Has read access: %s, has write access: %s.", sid_name, hex(permissions), bool((permissions & GENERIC_FILE_READ)), bool((permissions & GENERIC_FILE_WRITE)), extra={'conn_counter': conn_counter})
             match target_permission:                                                
                 case 'read':                                                        # check for read perms
                     perm_flag = int(bool(permissions & GENERIC_FILE_READ))          # bitwise AND with generic permission bit mask to get result 
-                    if not perm_flag: break                                         # if even ONE of the groups in the list deny access, deny access altogether
+                    if not perm_flag: 
+                        break                                         # if even ONE of the groups in the list deny access, deny access altogether
                 case 'write':
                     perm_flag = int(bool(permissions & GENERIC_FILE_WRITE))         # bitwise AND with generic permission bit mask to get result
-                    if not perm_flag: break                                         # if even ONE of the groups in the list deny access, deny access altogether
+                    if not perm_flag: 
+                        break                                         # if even ONE of the groups in the list deny access, deny access altogether
 
-    logger.info("Authentication concluded. Result: " + str(perm_flag), extra={'conn_counter': conn_counter})
+    logger.info("Authentication concluded. Result: %s", perm_flag, extra={'conn_counter': conn_counter})
 
     # send authentication result and close server connection
 
@@ -112,7 +124,7 @@ if __name__ == "__main__":
     while True:
         try: 
             conn, addr = dc_socket.accept()                                         # every time a connection is accepted, make a new thread
-            logger.info("Connected by " + str(addr), extra={'conn_counter': "N/A"})
+            logger.info("Connected by %s", addr, extra={'conn_counter': "N/A"})
             server_thread = threading.Thread(target=auth_code, args=(conn,))
             server_thread.start()
         except KeyboardInterrupt:

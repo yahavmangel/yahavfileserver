@@ -1,12 +1,25 @@
-import socket 
+"""
+Run LDAP-based Authentication services for the fileserver:
+- Query LDAP server for user info, groups, and security descriptor
+- connect with DC to authenticate. 
+
+Functions: 
+    check_ldap_auth(ldap_conn, username, perm, conn_counter) -> Bool 
+    auth_request(security_desc, target_permission, sid_list, conn_counter) -> Bool
+    initiate_ldap_conn(conn_counter) -> ldap connection
+    get_ldap_user_info(ldap_conn, username, attributes) -> query results 
+    construct_dn(basename) -> string 
+    wait_for_server_resp(dc_socket, resp, client_name, conn_counter) 
+"""
+import socket
 import logging
-import os 
+import os
 import configparser
-import sys 
-import json 
+import sys
+import json
 from ldap3 import Server, Connection, ALL, SASL, GSSAPI
 
-# logging and metadata 
+# logging and metadata
 
 login_name = os.getlogin()                                                                          # base logging and ID based on login
 script_dir = os.path.dirname(os.path.abspath(__file__))                                             # make script execution dynamic
@@ -20,7 +33,7 @@ try:                                                                            
     domain_controller_ip = config['server']['domain_controller_ip']
     target_dir = os.path.join(script_dir, config['server']['target_dir'])
 except KeyError:                                                                                    
-    logger.critical(f"Missing or misconfigured config file", extra={'conn_counter': "N/A"})
+    logger.critical("Missing or misconfigured config file", extra={'conn_counter': "N/A"})
     sys.exit(1)                                                                                     # stops script execution w/o key info 
 dc_array = domain_controller.split('.')[1:]
 
@@ -65,7 +78,7 @@ def check_ldap_auth(ldap_conn, username, perm, conn_counter):
         Bool: Final authentication decision. (True = Authorized, False = not authorized)
     """
 
-    logger.debug("verifying permissions for client " + str(username) + "...", extra={'conn_counter': conn_counter})
+    logger.debug("verifying permissions for client %s...", username, extra={'conn_counter': conn_counter})
 
     # query #1: get DN and nTSecurityDescriptor of client 
 
@@ -79,7 +92,7 @@ def check_ldap_auth(ldap_conn, username, perm, conn_counter):
 
         domain_dn = construct_dn('')
 
-        logger.debug("Scanning for client " + str(username) + " group membership...", extra={'conn_counter': conn_counter})
+        logger.debug("Scanning for %s's group membership...", username, extra={'conn_counter': conn_counter})
         ldap_conn.search(search_base=domain_dn,                                                                             
                          search_filter=f'(&(objectCategory=group)(member={user_dn}))',                                      # look for groups that the client is a member of, as they will contain the permissions which the user will inherit
                          attributes=['cn', 'groupType', 'objectSid'])                                                       # return important data about each group
@@ -87,18 +100,15 @@ def check_ldap_auth(ldap_conn, username, perm, conn_counter):
         if ldap_conn.entries:
             groups_to_check = []                                                                                            # list of SIDs to be sent to the domain controller for permission checking
             for entry in ldap_conn.entries: 
-                if((entry.groupType.value & SEC_GROUP_BITMASK) != 0):                                                       # check if the group is a security group (not a distribution group)
-                    logger.debug(str(username) + " is a member of the " + str(entry.cn.value) + " security group", extra={'conn_counter': conn_counter})
+                if (entry.groupType.value & SEC_GROUP_BITMASK) != 0:                                                       # check if the group is a security group (not a distribution group)
+                    logger.debug("%s is a member of the %s security group", username, entry.cn.value, extra={'conn_counter': conn_counter})
                     groups_to_check.append(entry.objectSid.value)                                                           # add SID of security group to the list
             return bool(auth_request(bin_sd, perm, groups_to_check, conn_counter))                                          # send authentication request to domain controller, and return result to main code
-        
-        else: 
-            logger.debug("Client " + str(username) + " is not member of any security group.", extra={'conn_counter': conn_counter})
-            return False                                                                                                    # edge case: client is not a member of any group
-    
-    else:
-        logger.debug("Client " + str(username) + " was not found in LDAP server.", extra={'conn_counter': conn_counter}) 
-        return False                                                                                                        # edge case: client does not exist in domain
+        logger.debug("Client %s is not member of any security group.", username, extra={'conn_counter': conn_counter})
+        return False                                                                                                    # edge case: client is not a member of any group
+
+    logger.debug("Client %s was not found in LDAP server.", username, extra={'conn_counter': conn_counter}) 
+    return False                                                                                                        # edge case: client does not exist in domain
 
 def auth_request(security_desc, target_permission, sid_list, conn_counter):
     """
@@ -123,11 +133,11 @@ def auth_request(security_desc, target_permission, sid_list, conn_counter):
     try: 
         dc_socket.settimeout(10)
         dc_socket.connect((domain_controller_ip, port2))
-    except socket.error:
-        logger.critical(f"Failed to connect to DC", extra={'conn_counter': conn_counter})
-        return False
     except socket.timeout:
         logger.critical("Connection timed out. DC unreachable.", extra={'conn_counter': conn_counter})
+        return False
+    except socket.error:
+        logger.critical("Failed to connect to DC", extra={'conn_counter': conn_counter})
         return False
                                                                                                     
     # Convert binary data to bytes and combine everything into a single message. 
@@ -160,15 +170,15 @@ def initiate_ldap_conn(conn_counter):
     """
     
     ldap_server = f'ldap://{domain_controller}'   
-    logger.debug("Connecting to LDAP server: " + str(ldap_server), extra={'conn_counter': conn_counter})       
+    logger.debug("Connecting to LDAP server: %s", ldap_server, extra={'conn_counter': conn_counter})       
     try:                                                                    
         server = Server(ldap_server, get_info=ALL)                                                      # Connect to the LDAP server using GSSAPI (Kerberos) authentication
         ldap_conn = Connection(server, authentication=SASL, sasl_mechanism=GSSAPI)    
         ldap_conn.bind()   
     except Exception: 
         logger.critical("Error connecting to LDAP server. Ensure you have a valid Kerberos ticket.", extra={'conn_counter': conn_counter})
-        return 
-    logger.info("Successfully connected to LDAP server: " + str(ldap_server), extra={'conn_counter': conn_counter})
+        return ldap_conn
+    logger.info("Successfully connected to LDAP server: %s", ldap_server, extra={'conn_counter': conn_counter})
     return ldap_conn
 
 def get_ldap_user_info(ldap_conn, username, attributes):                                                # query to collect attributes from a given user/computer account 
@@ -189,7 +199,7 @@ def get_ldap_user_info(ldap_conn, username, attributes):                        
                         search_filter=f'(|(&(objectClass=user)(|(cn={username})(sAMAccountName={username})))(&(objectClass=computer)(cn={username})))',
                         attributes=attributes)
     except Exception:
-        return 
+        return None 
 
     return ldap_conn.entries
 
@@ -210,9 +220,18 @@ def construct_dn(basename):                                                     
     return basename
 
 def wait_for_server_resp(dc_socket, resp, client_name, conn_counter):                                   # helper function that polls for specific server response
+    """
+    Polls DC for message.
+
+    Args: 
+        dc_socket: socket connected to DC. 
+        resp: desired response
+        client_name: DC.
+        conn_counter: current connection ID (for logging)
+    """
     resp_len = len(resp)
     while True:
         server_resp = dc_socket.recv(resp_len).decode('utf-8')
         if resp in server_resp and resp in command_table.values():
-            logger.debug("Received message from " + str(client_name) + ": " + resp, extra={'conn_counter': conn_counter})
+            logger.debug("Received message from %s: %s", client_name, resp, extra={'conn_counter': conn_counter})
             break

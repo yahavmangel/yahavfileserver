@@ -1,8 +1,14 @@
+"""
+Run the localserver, which is responsible for the following: 
+- Acts as central logserver 
+- Acts as receiver of user prompts (print and input)
+- Launches "Desktop GUI"
+"""
 import socket
 import configparser
 import threading
 import json
-import logging 
+import logging
 import os
 import sys
 import queue
@@ -29,7 +35,7 @@ script_dir = os.path.dirname(os.path.abspath(__file__))                         
 
 log_queue = queue.Queue()                                                           # instantiate thread safe log queue
 logger = logging.getLogger("YFS")
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 if logger.hasHandlers():                                                            # remove default handler
     logger.handlers.clear()
@@ -46,7 +52,7 @@ try:
     config.read(os.path.join(script_dir, 'config.ini'))
     port = int(config['local']['port'])                                             # port for communication for all logs and user prompts
 except KeyError:                                                                    # check for misconfigured config file 
-    logger.critical(f"Missing or misconfigured config file", extra={'conn_counter': "N/A"})
+    logger.critical("Missing or misconfigured config file", extra={'conn_counter': "N/A"})
     sys.exit(1)
 
 # magic numbers 
@@ -153,4 +159,3 @@ if __name__ == "__main__":
         conn, addr = local_sock.accept()
         local_thread = threading.Thread(target=local_handler, args=(conn,))
         local_thread.start()
-

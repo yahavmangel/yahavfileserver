@@ -1,3 +1,8 @@
+"""
+    Custom JSON-based logging socket handler.
+    Overrides the logging.Handler class emit() and close() functions. 
+    This is a multithreaded implentation to prevent premature connection closure.
+"""
 import logging
 import json
 import socket
@@ -5,9 +10,7 @@ import threading
 
 class JSONSocketHandler(logging.Handler):
     """
-    Custom JSON-based logging socket handler.
-    Overrides the logging.Handler class emit() and close() functions. 
-    This is a multithreaded implentation to prevent premature connection closure.
+    Custom JSON Socket Handler class. See module docstring for more info. 
     """
     def __init__(self, host, port):                                                     # initialize both the superclass constructor, and the socket connection.
         super().__init__()

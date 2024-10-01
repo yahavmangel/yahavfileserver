@@ -1,13 +1,26 @@
+"""
+Run the fileserver, including server/client, server/DC, and server/localserver interactions. 
+
+Functions: 
+
+client_handler(conn, conn_counter, conn_addr)
+handle_store(conn, filename, client_dir, client_name, conn_counter)
+handle_request(conn, filename, client_name, conn_counter)
+similarity_search(dir_name, keyword, conn_counter) -> [string]
+get_file_lock(filename) -> lock 
+send_server_msg(conn, msg, client_name, conn_counter)
+
+"""
 import socket
-import os 
+import os
 import json
 import threading
 import zipfile
 import configparser
 from difflib import get_close_matches
-import logging 
-import sys 
-from auth import *
+import logging
+import sys
+from auth import check_ldap_auth, initiate_ldap_conn, get_ldap_user_info
 from loghandler import JSONSocketHandler
 
 # logging and metadata
@@ -29,7 +42,7 @@ try:                                                                            
     local_ip = config['server']['local_ip']                                                         # ip of localserver
     target_dir = os.path.join(script_dir, config['server']['target_dir'])                           # target directory of operations
 except KeyError:                                                                                    
-    logger.critical(f"Missing or misconfigured config file", extra={'conn_counter': "N/A"})
+    logger.critical("Missing or misconfigured config file", extra={'conn_counter': "N/A"})
     sys.exit(1)                                                                                     # stops script execution w/o key info 
 dc_array = domain_controller.split('.')[1:]
 
@@ -77,7 +90,7 @@ global_dict_lock = threading.Lock()                                             
 
 # main code 
 
-def client_handler(conn, conn_counter):
+def client_handler(conn, conn_counter, conn_addr):
     """
     Handles a client connection to the server (individual client thread): receives client's message -> requests DC to authenticate client -> handles client request
 
@@ -91,8 +104,8 @@ def client_handler(conn, conn_counter):
         # collect connection information
 
         try: 
-            hostname, alias, ip_addresses = socket.gethostbyaddr(addr[0])                           # reverse DNS lookup on ip address to get hostname
-            logger.info("Client host connected: " + str(hostname), extra={'conn_counter': conn_counter})
+            hostname, _, _ = socket.gethostbyaddr(conn_addr[0])                           # reverse DNS lookup on ip address to get hostname
+            logger.info("Client host connected: %s", hostname, extra={'conn_counter': conn_counter})
         except socket.herror: 
             logger.critical("DNS server offline. Quitting.", extra={'conn_counter': "N/A"})
             conn.close()
@@ -100,7 +113,7 @@ def client_handler(conn, conn_counter):
 
         client_msg = conn.recv(BUF_SIZE_SMALL).decode('utf-8')                                      # receive and parse initial client message
         name, command, filename = client_msg.split('|')
-        logger.info("_______________NEW CONNECTION: " + str(name) + "; COMMAND: " + str(command) + " " + str(filename) + "; ID: " + str(conn_counter) + "______________", extra={'conn_counter': conn_counter})
+        logger.info("_______________NEW CONNECTION: %s; COMMAND: %s %s; ID: %s______________", name, command, filename, conn_counter, extra={'conn_counter': conn_counter})
         ldap_conn = initiate_ldap_conn(conn_counter)                                                # initiate LDAP server connection for rest of operation
         logger.debug("Searching for client in LDAP server...", extra={'conn_counter': conn_counter})
         entries = get_ldap_user_info(ldap_conn, name.split('@')[0], ['cn'])                         # verify existence/CN of client 
@@ -118,7 +131,7 @@ def client_handler(conn, conn_counter):
         if command == 'STORE':
 
             if check_ldap_auth(ldap_conn, client_name, 'write', conn_counter):                      # check if client has write perms                  
-                logger.info("Client " + str(client_name) + " is authorized.", extra={'conn_counter': conn_counter})
+                logger.info("Client %s is authorized.", client_name, extra={'conn_counter': conn_counter})
                 send_server_msg(conn, 'AUTHSUCCESS', client_name, conn_counter)                     # indicate to client that they are authorized and may proceed
                 handle_store(conn, filename, client_dir, client_name, conn_counter)                 # process client request 
             else:                                                                                   # client is not authorized
@@ -130,7 +143,7 @@ def client_handler(conn, conn_counter):
         elif command == 'REQUEST':
 
             if check_ldap_auth(ldap_conn, client_name, 'read', conn_counter):                       # check if client has write perms
-                logger.info("Client " + str(client_name) + " is authorized.", extra={'conn_counter': conn_counter})
+                logger.info("Client %s is authorized.", client_name, extra={'conn_counter': conn_counter})
                 send_server_msg(conn, 'AUTHSUCCESS', client_name, conn_counter)                     # indicate to client that they are authorized and may proceed
                 handle_request(conn, filename, client_name, conn_counter)                           # process client request
             else:
@@ -162,20 +175,21 @@ def handle_store(conn, filename, client_dir, client_name, conn_counter):
     # check for overwrite
 
     basename = os.path.basename(filename)
-    if basename == '': basename = os.path.basename(filename[:-1])                                   # weird edge case for dirs
+    if basename == '': 
+        basename = os.path.basename(filename[:-1])                                   # weird edge case for dirs
 
     if os.path.exists(os.path.join(client_dir, basename)): 
         logger.warning("Overwrite detected. Notifying client...", extra={'conn_counter': conn_counter})
         send_server_msg(conn, 'OVERWRITE', client_name, conn_counter)                               # notify client of potential overwrite
         client_msg = conn.recv(BUF_SIZE_SMALL).decode('utf-8')                                      # receive client response to overwrite
         while True: 
-            if ((client_msg == 'ACK') or (client_msg == 'QUIT')):                                   # wait for client response to overwrite
+            if client_msg in ['ACK', 'QUIT']:                                   # wait for client response to overwrite
                 break
         if client_msg == 'QUIT':                                                                    # client decided to abort to avoid overwrite
             logger.info("Client canceled request. Exiting.", extra={'conn_counter': conn_counter})
             conn.close()
             return 
-        elif client_msg == 'ACK':
+        if client_msg == 'ACK':
             logger.info("Client acknowledged overwrite. Continuing.", extra={'conn_counter': conn_counter})
 
     # initiate request 
@@ -185,7 +199,7 @@ def handle_store(conn, filename, client_dir, client_name, conn_counter):
     logger.debug("Checking if STORE request is for a file or a directory...", extra={'conn_counter': conn_counter})
     while True: 
         client_msg = conn.recv(BUF_SIZE_SMALL).decode('utf-8')                                      # wait for client's message of file type to store 
-        if (client_msg == 'STOREDIRE' or client_msg == 'STOREFILE'):
+        if client_msg in ['STOREDIRE', 'STOREFILE']:
             break
     
     if client_msg == 'STOREFILE':   
@@ -207,7 +221,7 @@ def handle_store(conn, filename, client_dir, client_name, conn_counter):
                         file.write(data)
                         data_flag = 1
                     if data_flag: 
-                        logger.info("File " + str(filename) + " stored successfully", extra={'conn_counter': conn_counter})
+                        logger.info("File %s stored successfully", filename, extra={'conn_counter': conn_counter})
             except IOError:
                 logger.error("Failed to write file during STORE", extra={'conn_counter': conn_counter})
                 return
@@ -230,7 +244,7 @@ def handle_store(conn, filename, client_dir, client_name, conn_counter):
                 os.fsync(temp_zip.fileno())
                 with zipfile.ZipFile(tempfilename, 'r') as zip_file:                        # use zipfile API to unzip requested directory 
                     zip_file.extractall(path=extraction_dir)
-                    logger.info("Directory " + str(dirname) + " unzipped and stored successfully", extra={'conn_counter': conn_counter})
+                    logger.info("Directory %s unzipped and stored successfully", dirname, extra={'conn_counter': conn_counter})
             os.remove(tempfilename)                                                         # remove temp zip file. 
     
 def handle_request(conn, filename, client_name, conn_counter):
@@ -270,7 +284,7 @@ def handle_request(conn, filename, client_name, conn_counter):
                             conn.sendall(data)
                             logger.info("File sent successfully", extra={'conn_counter': conn_counter})
                     except IOError:
-                        logger.error(f"Failed to read file during REQUEST", extra={'conn_counter': conn_counter})
+                        logger.error("Failed to read file during REQUEST", extra={'conn_counter': conn_counter})
                         return 
             
             # directory request 
@@ -280,16 +294,16 @@ def handle_request(conn, filename, client_name, conn_counter):
                 tempfilename = target_dir + dirname + '.zip'
                 dir_lock = get_file_lock(dirname)
                 with dir_lock:                                                              # synchronization: prevent r/w conflicts on the same file
-                    with zipfile.ZipFile(tempfilename, 'w') as zip:                         # use zipfile API to zip requested directory. This opens a temp zip file
+                    with zipfile.ZipFile(tempfilename, 'w') as zipFile:                         # use zipfile API to zip requested directory. This opens a temp zip file
                         for root, dirs, files in os.walk(target_dir + dirname):
                             for file in files:                                              # add every file to zip archive
                                 filepath = os.path.join(root, file)
                                 arcname = os.path.relpath(filepath, start=target_dir + dirname)   
-                                zip.write(filepath, arcname=arcname)                        # use relative path to maintain correct directory structure
-                            for dir in dirs:                                                # add every subdirectory to zip archive
-                                dirpath = os.path.join(root, dir)
+                                zipFile.write(filepath, arcname=arcname)                        # use relative path to maintain correct directory structure
+                            for dire in dirs:                                                # add every subdirectory to zip archive
+                                dirpath = os.path.join(root, dire)
                                 arcname = os.path.relpath(dirpath, start=target_dir + dirname)    
-                                zip.write(dirpath, arcname=arcname)                         # use relative path to maintain correct directory structure
+                                zipFile.write(dirpath, arcname=arcname)                         # use relative path to maintain correct directory structure
                     with open(tempfilename, 'rb') as zip_file:                              # open file in binary mode to send it over socket
                         data = zip_file.read()
                         conn.sendall(data)
@@ -311,17 +325,17 @@ def similarity_search(dir_name, keyword, conn_counter):
         Array of matches returned by the search 
     """
 
-    logger.debug("Searching directory: " + str(dir_name) + ". Search keyword is: " + str(keyword), extra={'conn_counter': conn_counter})
+    logger.debug("Searching directory: %s. Search keyword is: %s", dir_name, keyword, extra={'conn_counter': conn_counter})
     file_dict = {}                          
     for root, dirs, files in os.walk(dir_name):                                                                             # walk through all files in server, adding their base names to a dictionary.                                              
         for file in files: 
             filepath = os.path.join(root.replace(dir_name, '', 1), file)
             file_dict.update({filepath:os.path.basename(filepath)})
-        for dir in dirs: 
-            dirpath = os.path.join(root.replace(dir_name, '', 1), dir)
+        for dire in dirs: 
+            dirpath = os.path.join(root.replace(dir_name, '', 1), dire)
             file_dict.update({dirpath + '/':os.path.basename(dirpath)})                                                     # add '/' to signify it is a directory
     matches = get_close_matches(keyword, list(file_dict.values()), n=NUM_FILES_RETURNED, cutoff=SIMILARITY_IDX)             # perform search on all file and directory base names
-    logger.info("Search for keyword " + str(keyword) + " successful, server returned " + str(len(matches)) + " options.", extra={'conn_counter': conn_counter})
+    logger.info("Search for keyword %s successful, server returned %s options.", keyword, len(matches), extra={'conn_counter': conn_counter})
     return [match for match, base_name in file_dict.items() if base_name in matches]                                        # return all matches' full file name in an array
         
 def get_file_lock(filename):
@@ -350,7 +364,7 @@ def send_server_msg(conn, msg, client_name, conn_counter):
         client_name: name of client to send message to 
         conn_counter: current connection ID (for logging)
     """
-    logger.debug("server -> " + str(client_name) + ": " + msg, extra={'conn_counter': conn_counter})                        # log each server message in debug level of logger 
+    logger.debug("server -> %s: %s", client_name, msg, extra={'conn_counter': conn_counter})                        # log each server message in debug level of logger 
     conn.sendall(command_table[msg].encode())
 
 # main loop 
@@ -371,6 +385,6 @@ if __name__ == "__main__":
     while True:
         conn, addr = server_socket.accept()                                                                                 # every time a connection is accepted by server, make a new thread
         conn_counter += 1                                                                                                   # increment connection ID every time, passing it to thread for logging.
-        logger.info("Connected by " + str(addr), extra={'conn_counter': conn_counter})
-        client_thread = threading.Thread(target=client_handler, args=(conn,conn_counter))
+        logger.info("Connected by %s", addr, extra={'conn_counter': conn_counter})
+        client_thread = threading.Thread(target=client_handler, args=(conn,conn_counter,addr))
         client_thread.start()
