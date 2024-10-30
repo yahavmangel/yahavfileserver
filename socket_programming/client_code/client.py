@@ -67,8 +67,6 @@ command_table = {
 
 # magic numbers
 
-NUM_CLIENT_COMMANDS = 2
-NUM_INTERNAL_COMMANDS = 7
 AUTH_RESP_LEN = 5
 BUF_SIZE_SMALL = 1024
 BUF_SIZE_LARGE = 4096
@@ -176,7 +174,7 @@ def handle_overwrite(client_socket):
             user_input = send_prompt("File already exists. Overwrite? [y/n] ", "prompt")
             if user_input in ['n', 'y']:
                 break
-            send_prompt("Invalid input, try again\n", "prompt")
+            send_prompt("Invalid input, try again\n", "print")
         if user_input == 'n':
             logger.info("Request canceled.")
             send_client_msg(client_socket, "QUIT")              # notify server that you quit

@@ -12,6 +12,7 @@ import logging
 import os
 import sys
 import queue
+from localgui import localGUI
 
 class CustomFormatter(logging.Formatter):
     """
@@ -55,7 +56,16 @@ logger.propagate = False                                        # stop root log 
 try:
     config = configparser.ConfigParser()
     config.read(os.path.join(script_dir, 'config.ini'))
-    port = int(config['local']['port'])
+    port = int(config['local']['port'])                         # port for external communication
+
+    # info for local GUI
+    mode_num = int(config['local']['mode'])
+    domain = config['local']['domain']
+    domain_controller_ip = config['local']['domain_controller_ip']
+    server_ip = config['local']['server_ip']
+    local_ip = config['local']['local_ip']
+    ldap_server = config['local']['ldap_server']
+
 except KeyError:                                                # case of misconfigured config file
     logger.critical("Missing or misconfigured config file", extra={'conn_counter': "N/A"})
     sys.exit(1)
@@ -75,19 +85,19 @@ def logger_thread():
     All incoming logs are placed in the log queue. This thread will then dequeue 
     and write the oldest log. 
     """
-    while True:
-        level, message, extra = log_queue.get()
-        if level == "DEBUG":
-            logger.debug(message, extra=extra)
-        elif level == "INFO":
-            logger.info(message, extra=extra)
-        elif level == "WARNING":
-            logger.warning(message, extra=extra)
-        elif level == "ERROR":
-            logger.error(message, extra=extra)
-        elif level == "CRITICAL":
-            logger.critical(message, extra=extra)
-        log_queue.task_done()
+    # while True:
+    #     level, message, extra = log_queue.get()
+    #     if level == "DEBUG":
+    #         logger.debug(message, extra=extra)
+    #     elif level == "INFO":
+    #         logger.info(message, extra=extra)
+    #     elif level == "WARNING":
+    #         logger.warning(message, extra=extra)
+    #     elif level == "ERROR":
+    #         logger.error(message, extra=extra)
+    #     elif level == "CRITICAL":
+    #         logger.critical(message, extra=extra)
+    #     log_queue.task_done()
 
 
 threading.Thread(target=logger_thread, daemon=True).start()     # Start the logger thread
@@ -153,13 +163,27 @@ def process_usr_prompt(usr_prompt, conn):
         case "PRINT":
             print(usr_prompt[MSG_PREFIX2_LEN:])                 # if print, print to console
 
+def launch_gui():
+    gui = localGUI(log_queue, None, None, mode_num, domain, server_ip, domain_controller_ip, local_ip, ldap_server)
+    gui.mainloop()
+
 if __name__ == "__main__":
+
+    logger.info("Launching local GUI...",
+                extra={'loggername':"localserver", 'conn_counter': "N/A"})
+    # launch gui thread
+
+    gui_thread = threading.Thread(target=launch_gui)
+    gui_thread.daemon = True
+    gui_thread.start()
+
+    # main localserver loop 
 
     local_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     local_sock.bind(('0.0.0.0', port))
     local_sock.listen(50)
 
-    logging.info("localserver is listening...",
+    logger.info("localserver is listening...",
                  extra={'loggername':"localserver", 'conn_counter': "N/A"})
 
     while True:

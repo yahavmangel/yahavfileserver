@@ -97,7 +97,7 @@ global_dict_lock = threading.Lock()
 def client_handler(conn, conn_counter, conn_addr):
     """
     Handles a client connection to the server (individual client thread): 
-    1. receives client's message 
+    1. receives client's request 
     2. requests DC to authenticate client 
     3. handles client request
 
@@ -165,7 +165,7 @@ def client_handler(conn, conn_counter, conn_addr):
 
         elif command == 'REQUEST':
 
-            # check if client has write perms
+            # check if client has read perms
             if check_ldap_auth(ldap_conn, client_name, 'read', conn_counter):
                 logger.info("Client %s is authorized.",
                             client_name, extra={'conn_counter': conn_counter})
@@ -192,7 +192,11 @@ def client_handler(conn, conn_counter, conn_addr):
 
 def handle_store(conn, filename, client_dir, client_name, conn_counter):
     """
-    Handles a client STORE request: checks for overwrite -> receives client's file/dir
+    Handles a client STORE request: 
+    
+    1. checks for overwrite 
+    2. checks if request is for file/dir
+    3. receives client's file/dir, placing it in client's directory
 
     Args:
         conn: connection point to client 
@@ -359,7 +363,7 @@ def handle_request(conn, filename, client_name, conn_counter):
                             logger.info("File sent successfully",
                                         extra={'conn_counter': conn_counter})
                     except IOError:
-                        logger.error("Failed to read file during REQUEST",
+                        logger.error("Failed to read requested file",
                                      extra={'conn_counter': conn_counter})
                         return
 
@@ -438,7 +442,8 @@ def similarity_search(dir_name, keyword, conn_counter):
 
 def get_file_lock(filename):
     """
-    Handles a client STORE request: checks for overwrite -> receives client's file/dir
+    Helper function to get a lock for a file or a directory.
+    Prevents r/w and w/w conflicts b/w server resources. 
 
     Args:
         filename: name of file or directory to protect with a lock 

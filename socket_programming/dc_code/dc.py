@@ -95,7 +95,7 @@ def auth_code(conn):
         ace_sid = ace[2]                                        # grab SID of current ACE
         try:
             sid_name, _, _ = win32security.LookupAccountSid(None, ace_sid)
-        except TypeError:                                # this filters out non-SID objects
+        except TypeError:                                       # this filters out non-SID objects
             continue
         string_sid = win32security.ConvertSidToStringSid(ace_sid)
         if string_sid in sid_list:                              # only check for relevant SIDs
