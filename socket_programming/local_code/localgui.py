@@ -1,5 +1,4 @@
 import tkinter as tk
-from tkinter import ttk
 
 class localGUI(tk.Tk): 
     def __init__(self, log_queue, print_queue, prompt_queue, mode_num, domain_name, server_ip, domain_controller_ip, local_ip, ldap_server):
@@ -14,8 +13,9 @@ class localGUI(tk.Tk):
         self.print_queue = print_queue 
         self.prompt_queue = prompt_queue 
         self.log_src_arr = ["Aggregate"]
-        self.log_text = tk.Text()
-
+        self.log_text_arr = [tk.Text()]
+        self.cur_display_idx = 0
+        self.prev_display_idx = -1
         # create top frame for static information
         self.init_top_frame(mode_num, domain_name, server_ip, domain_controller_ip, local_ip, ldap_server)
 
@@ -65,51 +65,56 @@ class localGUI(tk.Tk):
     def launch_user_mode(self):
 
         # create main frame
-        main_frame = tk.Frame(self, width=1200, height=645, bg="lightgrey", relief="ridge", bd=5)
-        main_frame.grid(row=1, column=0, sticky="ew")
+        main_frame = tk.Frame(self, width=118, height=645, bg="lightgrey", relief="ridge", bd=5)
+        main_frame.grid(row=1, column=0, sticky="nsew")
         main_frame.grid_propagate(False)
 
         # configure main frame grid
         for i in range(6):
-            main_frame.columnconfigure(i, minsize=199) # divide into 6 200px columns
+            main_frame.columnconfigure(i, minsize=200) # divide into 6 200px columns
+            if i==5: main_frame.columnconfigure(i, minsize=187)
+
+        # create menu frame and link to canvas 
+        scrollbar_frame = tk.Frame(main_frame)
+        scrollbar_frame.grid(row=0, column=0, sticky="nsew")
 
         # create canvas object for menu 
-        canvas = tk.Canvas(main_frame, height=638)
+        canvas = tk.Canvas(scrollbar_frame, height=631, width=199)
         canvas.pack_propagate(False)
+        canvas.pack(side="left", fill="both", expand=True)
 
         # create scrollbar for menu
         scrollbar = tk.Scrollbar(canvas, orient="vertical", command=canvas.yview)
         scrollbar.pack(side="right", fill="y")
 
-        # create menu frame and link to canvas 
-        log_menu = tk.Frame(canvas, height=638, bg="white", relief="ridge", bd=2)
+        # create log menu frame and link to canvas 
+        log_menu = tk.Frame(canvas, bg="white", relief="ridge", bd=2)
+        log_menu.pack()
         canvas.create_window((0,0), window=log_menu, anchor="nw")
-        canvas.config(scrollregion=canvas.bbox("all"))
-        canvas.pack(side="left", fill="both", expand=True)
-
-        # create "Aggregate" log button
-        tk.Button(log_menu, text=self.log_src_arr[-1], height=4, width=26).grid(row=0, column=0)
-        log_menu.update_idletasks() # update frame with new button
-
-        # log_menu.grid(row=0, column=0, sticky="nsew")
+        canvas.config(scrollregion=canvas.bbox("all"), yscrollcommand=scrollbar.set)
 
         # create log display frame
         log_display = tk.Frame(main_frame, bg="lightgrey", relief="ridge", bd=2)
         log_display.grid(row=0, column=1, columnspan=5, sticky="nsew")
+        log_display.grid_propagate(False)
         
         # create a scrollbar for log display 
-        log_scrollbar = tk.Scrollbar(log_display, orient="vertical", command=self.log_text.yview)
+        log_scrollbar = tk.Scrollbar(log_display, orient="vertical", command=self.log_text_arr[self.cur_display_idx].yview)
         log_scrollbar.pack(side="right", fill="y")
 
-        # create text widget for log display 
-        self.log_text = tk.Text(log_display, wrap=tk.WORD, bg="white", height = 40, yscrollcommand=log_scrollbar.set)
-        self.log_text.pack(expand=True, fill=tk.BOTH)
-        log_scrollbar.config(command=self.log_text.yview)  # link the scrollbar to the Text widget
+        # create "Aggregate" log button
+        tk.Button(log_menu, text=self.log_src_arr[-1], height=4, width=24, command=lambda index=0, log_scrollbar=log_scrollbar: self.switch_text(index, log_scrollbar)).grid(row=0, column=0)
+        log_menu.update_idletasks() # update frame with new button
+
+        # create text widget for log display (init to Aggregate)
+        self.log_text_arr[self.cur_display_idx] = tk.Text(log_display, wrap=tk.WORD, bg="white", yscrollcommand=log_scrollbar.set)
+        self.log_text_arr[self.cur_display_idx].pack(expand=True, fill=tk.BOTH, side="left")
+        log_scrollbar.config(command=self.log_text_arr[self.cur_display_idx].yview)  # link the scrollbar to the text widget
 
         # check for logs and update GUI
-        self.check_for_logs(log_menu, canvas) 
+        self.check_for_logs(log_menu, canvas, log_scrollbar, log_display) 
 
-    def check_for_logs(self, log_menu, canvas):
+    def check_for_logs(self, log_menu, canvas, log_scrollbar, log_display):
 
         # check for incoming logs
         while not self.log_queue.empty():
@@ -128,14 +133,25 @@ class localGUI(tk.Tk):
             if loggername not in self.log_src_arr: 
                 # add new log source to source array and create new button in canvas
                 self.log_src_arr.append(loggername) 
-                tk.Button(log_menu, text=self.log_src_arr[-1], height=4, width=26).grid(row=(len(self.log_src_arr)-1), column=0)
+                self.log_text_arr.append(tk.Text(log_display, wrap=tk.WORD, bg="white", yscrollcommand=log_scrollbar.set))
+                cur_idx = len(self.log_src_arr)-1
+                tk.Button(log_menu, text=self.log_src_arr[-1], height=4, width=24, command=lambda index=cur_idx, log_scrollbar=log_scrollbar: self.switch_text(index, log_scrollbar)).grid(row=cur_idx, column=0)
                 log_menu.update_idletasks()
                 canvas.config(scrollregion=canvas.bbox("all"))
             
-            # update text box with new log
-            self.log_text.insert(tk.END, log_message + '\n')
-            self.log_text.yview(tk.END)  # auto-scroll to the end
+            # update text boxes (source-only AND aggregate) with new log
+            self.log_text_arr[0].insert(tk.END, log_message + '\n')
+            self.log_text_arr[0].yview(tk.END) # auto-scroll to the end
+            self.log_text_arr[self.log_src_arr.index(loggername)].insert(tk.END, log_message + '\n')
+            self.log_text_arr[self.log_src_arr.index(loggername)].yview(tk.END)  # auto-scroll to the end
             self.log_queue.task_done()
         
         # schedule the next log check
-        self.after(100, self.check_for_logs, log_menu, canvas)  # check every 100ms
+        self.after(100, self.check_for_logs, log_menu, canvas, log_scrollbar, log_display)  # check every 100ms
+
+    def switch_text(self, index, log_scrollbar):
+        self.prev_display_idx = self.cur_display_idx
+        self.cur_display_idx = index
+        self.log_text_arr[self.prev_display_idx].pack_forget()
+        self.log_text_arr[self.cur_display_idx].pack(expand=True, fill=tk.BOTH, side="left")
+        log_scrollbar.config(command=self.log_text_arr[self.cur_display_idx].yview)  # link the scrollbar to the text widget
