@@ -12,10 +12,13 @@ class localGUI(tk.Tk):
         self.log_queue = log_queue
         self.print_queue = print_queue 
         self.prompt_queue = prompt_queue 
+
+        #initialize log display metadata
         self.log_src_arr = ["Aggregate"]
         self.log_text_arr = [tk.Text()]
         self.cur_display_idx = 0
         self.prev_display_idx = -1
+
         # create top frame for static information
         self.init_top_frame(mode_num, domain_name, server_ip, domain_controller_ip, local_ip, ldap_server)
 
@@ -64,9 +67,20 @@ class localGUI(tk.Tk):
     
     def launch_user_mode(self):
 
+        # create log title frames
+        log_title_frame = tk.Frame(self, bg="lightgrey")
+        log_title_frame.grid(row=1, column=0, sticky="nsew")
+        log_title_frame.grid_propagate(False)
+        log_label_frame = tk.Frame(log_title_frame, bg="lightgrey")
+        log_label_frame.pack(side="left")
+        log_label = tk.Label(log_label_frame, text='Select Log Source:', bg="lightgrey", font=('Times New Roman', 15, 'bold'), padx=20)
+        log_label.pack(side="left")
+        self.log_display_label = tk.Label(log_title_frame, bg="lightgrey", text='Aggregate Logs', font=('Times New Roman', 17, 'bold'))
+        self.log_display_label.pack(side="right", padx=(0, 450), fill="x")
+
         # create main frame
-        main_frame = tk.Frame(self, width=118, height=645, bg="lightgrey", relief="ridge", bd=5)
-        main_frame.grid(row=1, column=0, sticky="nsew")
+        main_frame = tk.Frame(self, width=118, height=613, bg="lightgrey", relief="ridge", bd=5)
+        main_frame.grid(row=2, column=0, sticky="nsew")
         main_frame.grid_propagate(False)
 
         # configure main frame grid
@@ -79,7 +93,7 @@ class localGUI(tk.Tk):
         scrollbar_frame.grid(row=0, column=0, sticky="nsew")
 
         # create canvas object for menu 
-        canvas = tk.Canvas(scrollbar_frame, height=631, width=199)
+        canvas = tk.Canvas(scrollbar_frame, height=600, width=199)
         canvas.pack_propagate(False)
         canvas.pack(side="left", fill="both", expand=True)
 
@@ -94,7 +108,7 @@ class localGUI(tk.Tk):
         canvas.config(scrollregion=canvas.bbox("all"), yscrollcommand=scrollbar.set)
 
         # create log display frame
-        log_display = tk.Frame(main_frame, bg="lightgrey", relief="ridge", bd=2)
+        log_display = tk.Frame(main_frame, bg="lightgrey")
         log_display.grid(row=0, column=1, columnspan=5, sticky="nsew")
         log_display.grid_propagate(False)
         
@@ -103,18 +117,20 @@ class localGUI(tk.Tk):
         log_scrollbar.pack(side="right", fill="y")
 
         # create "Aggregate" log button
-        tk.Button(log_menu, text=self.log_src_arr[-1], height=4, width=24, command=lambda index=0, log_scrollbar=log_scrollbar: self.switch_text(index, log_scrollbar)).grid(row=0, column=0)
+        tk.Button(log_menu, text=self.log_src_arr[-1], height=4, width=24, command=lambda index=0, log_scrollbar=log_scrollbar, log_title_frame=log_title_frame: self.switch_text(index, log_scrollbar, log_title_frame)).grid(row=0, column=0)
         log_menu.update_idletasks() # update frame with new button
 
         # create text widget for log display (init to Aggregate)
         self.log_text_arr[self.cur_display_idx] = tk.Text(log_display, wrap=tk.WORD, bg="white", yscrollcommand=log_scrollbar.set)
         self.log_text_arr[self.cur_display_idx].pack(expand=True, fill=tk.BOTH, side="left")
         log_scrollbar.config(command=self.log_text_arr[self.cur_display_idx].yview)  # link the scrollbar to the text widget
+        # self.log_src_arr.append("a")
+        # self.switch_text(1, log_scrollbar, log_title_frame)
 
         # check for logs and update GUI
-        self.check_for_logs(log_menu, canvas, log_scrollbar, log_display) 
+        self.check_for_logs(log_menu, canvas, log_scrollbar, log_display, log_title_frame) 
 
-    def check_for_logs(self, log_menu, canvas, log_scrollbar, log_display):
+    def check_for_logs(self, log_menu, canvas, log_scrollbar, log_display, log_title_frame):
 
         # check for incoming logs
         while not self.log_queue.empty():
@@ -135,7 +151,7 @@ class localGUI(tk.Tk):
                 self.log_src_arr.append(loggername) 
                 self.log_text_arr.append(tk.Text(log_display, wrap=tk.WORD, bg="white", yscrollcommand=log_scrollbar.set))
                 cur_idx = len(self.log_src_arr)-1
-                tk.Button(log_menu, text=self.log_src_arr[-1], height=4, width=24, command=lambda index=cur_idx, log_scrollbar=log_scrollbar: self.switch_text(index, log_scrollbar)).grid(row=cur_idx, column=0)
+                tk.Button(log_menu, text=self.log_src_arr[-1], height=4, width=24, command=lambda index=cur_idx, log_scrollbar=log_scrollbar, log_title_frame=log_title_frame: self.switch_text(index, log_scrollbar, log_title_frame)).grid(row=cur_idx, column=0)
                 log_menu.update_idletasks()
                 canvas.config(scrollregion=canvas.bbox("all"))
             
@@ -147,11 +163,15 @@ class localGUI(tk.Tk):
             self.log_queue.task_done()
         
         # schedule the next log check
-        self.after(100, self.check_for_logs, log_menu, canvas, log_scrollbar, log_display)  # check every 100ms
+        self.after(100, self.check_for_logs, log_menu, canvas, log_scrollbar, log_display, log_title_frame)  # check every 100ms
 
-    def switch_text(self, index, log_scrollbar):
+    def switch_text(self, index, log_scrollbar, log_title_frame):
         self.prev_display_idx = self.cur_display_idx
         self.cur_display_idx = index
         self.log_text_arr[self.prev_display_idx].pack_forget()
         self.log_text_arr[self.cur_display_idx].pack(expand=True, fill=tk.BOTH, side="left")
         log_scrollbar.config(command=self.log_text_arr[self.cur_display_idx].yview)  # link the scrollbar to the text widget
+
+        self.log_display_label.pack_forget()
+        self.log_display_label = tk.Label(log_title_frame, bg="lightgrey", text=f'{self.log_src_arr[self.cur_display_idx]} Logs', font=('Times New Roman', 17, 'bold'))
+        self.log_display_label.pack(side="right", padx=(0, 450))

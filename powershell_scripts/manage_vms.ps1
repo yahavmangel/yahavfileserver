@@ -1,10 +1,8 @@
-# File: manage_vms.ps1
-
 param (
     [string]$Action = "start"
 )
 
-# List of VM names
+# list of VM names
 $vmList = VBoxManage list vms | Select-String -Pattern 'client.*' | ForEach-Object {
     $_.Line -replace '.*"([^"]+)".*', '$1'
 }

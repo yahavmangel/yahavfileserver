@@ -1,5 +1,5 @@
 $servers = @(
-    @{Name="DC"; IP="192.168.1.225"; User="Administrator"; ScriptPath="Desktop\dc_code\dc.py"}
+    # @{Name="DC"; IP="192.168.1.225"; User="Administrator"; ScriptPath="Desktop\dc_code\dc.py"}
     @{Name="fileserver"; IP="192.168.1.224"; User="fileserver"; ScriptPath="server-code/server.py"}
 )
 
@@ -16,27 +16,27 @@ Start-Job -ScriptBlock {
     python3 ..\socket_programming\local_code\localserver.py
 }
 
-# foreach ($vm in $servers) {
-#     switch ($vm.Name) {
-#         "DC" {
-#             $pythonprefix = "python "
-#         }
-#         default { 
-#             $pythonprefix = "python3 "
-#         }
-#     }
-#     $command = $pythonprefix + $vm.ScriptPath 
-#     $sshCommand = "ssh $($vm.User)@$($vm.IP) $command"
-#     Write-Host "Executing on $($vm.Name): $sshCommand"
+foreach ($vm in $servers) {
+    switch ($vm.Name) {
+        "DC" {
+            $pythonprefix = "python "
+        }
+        default { 
+            $pythonprefix = "python3 "
+        }
+    }
+    $command = $pythonprefix + $vm.ScriptPath 
+    $sshCommand = "ssh $($vm.User)@$($vm.IP) $command"
+    Write-Host "Executing on $($vm.Name): $sshCommand"
 
-#       # Start each command in a separate thread
-#     $job = Start-Job -ScriptBlock {
-#         param($sshCommand)
-#         Invoke-Expression $sshCommand
-#     } -ArgumentList $sshCommand
-# }
+      # Start each command in a separate thread
+    $job = Start-Job -ScriptBlock {
+        param($sshCommand)
+        Invoke-Expression $sshCommand
+    } -ArgumentList $sshCommand
+}
 
-Write-Host "Launching client requests"
+Write-Host "Launching client requests..."
 
 foreach ($vm in $clients) {
     $command = "python3 " + $vm.ScriptPath + " REQUEST css"

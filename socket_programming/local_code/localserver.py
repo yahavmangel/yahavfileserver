@@ -171,6 +171,7 @@ if __name__ == "__main__":
 
     logger.info("Launching local GUI...",
                 extra={'loggername':"localserver", 'conn_counter': "N/A"})
+
     # launch gui thread
 
     gui_thread = threading.Thread(target=launch_gui)
@@ -179,14 +180,17 @@ if __name__ == "__main__":
 
     # main localserver loop 
 
-    local_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    local_sock.bind(('0.0.0.0', port))
-    local_sock.listen(50)
+    try: 
+        local_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        local_sock.bind(('0.0.0.0', port))
+        local_sock.listen(50)
 
-    logger.info("localserver is listening...",
-                 extra={'loggername':"localserver", 'conn_counter': "N/A"})
+        logger.info("localserver is listening...",
+                    extra={'loggername':"localserver", 'conn_counter': "N/A"})
 
-    while True:
-        conn, addr = local_sock.accept()
-        local_thread = threading.Thread(target=local_handler, args=(conn,))
-        local_thread.start()
+        while True:
+            conn, addr = local_sock.accept()
+            local_thread = threading.Thread(target=local_handler, args=(conn,))
+            local_thread.start()
+    except: 
+        pass
