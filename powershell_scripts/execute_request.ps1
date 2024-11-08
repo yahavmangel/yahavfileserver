@@ -12,18 +12,18 @@ $clients = @(
 
 $client = $clients | Where-Object { $_.Name -eq $target_client }
 
-# Check if the client entry was found
+# check if the client entry was found
 if ($client) {
-    # Array to hold job references
+    # array to hold job references
     $jobs = @()
 
-    # Execute client command
+    # execute client command
     $command = "python3 " + $client.ScriptPath + " " + $server_request
     $sshCommand = "ssh $($client.User)@$($client.IP) $command"
     
     Write-Host "Executing on $($client.Name): $sshCommand"
 
-    # Start client job
+    # start client job
     $clientJob = Start-Job -ScriptBlock {
         param($sshCommand)
         Invoke-Expression $sshCommand
@@ -31,11 +31,11 @@ if ($client) {
 
     $jobs += $clientJob
 
-    # Wait for all jobs to complete and display output
+    # wait for all jobs to complete and display output
     foreach ($job in $jobs) {
         # Wait for the job to finish
         $job | Wait-Job
-        $output = Receive-Job -Job $job
+        Receive-Job -Job $job
         Remove-Job -Job $job
     }
 } else { 

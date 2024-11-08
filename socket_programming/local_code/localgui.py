@@ -1,7 +1,8 @@
 import tkinter as tk
+import subprocess
 
 class localGUI(tk.Tk): 
-    def __init__(self, log_queue, print_queue, prompt_queue, mode_num, domain_name, server_ip, domain_controller_ip, local_ip, ldap_server):
+    def __init__(self, log_queue, print_queue, prompt_queue, mode_num, domain_name, server_ip, domain_controller_ip, local_ip, ldap_server, usergui_process):
         super().__init__()
         
         # main setup
@@ -18,6 +19,7 @@ class localGUI(tk.Tk):
         self.log_text_arr = [tk.Text()]
         self.cur_display_idx = 0
         self.prev_display_idx = -1
+        self.usergui_process = usergui_process
 
         # create top frame for static information
         self.init_top_frame(mode_num, domain_name, server_ip, domain_controller_ip, local_ip, ldap_server)
@@ -77,7 +79,8 @@ class localGUI(tk.Tk):
         log_label.pack(side="left")
         self.log_display_label = tk.Label(log_title_frame, bg="lightgrey", text='Aggregate Logs', font=('Times New Roman', 17, 'bold'))
         self.log_display_label.pack(side="right", padx=(0, 450), fill="x")
-
+        quit_button = tk.Button(log_label_frame, text="Quit", command=self.quit_gui)
+        quit_button.pack(side="right")
         # create main frame
         main_frame = tk.Frame(self, width=118, height=613, bg="lightgrey", relief="ridge", bd=5)
         main_frame.grid(row=2, column=0, sticky="nsew")
@@ -175,3 +178,9 @@ class localGUI(tk.Tk):
         self.log_display_label.pack_forget()
         self.log_display_label = tk.Label(log_title_frame, bg="lightgrey", text=f'{self.log_src_arr[self.cur_display_idx]} Logs', font=('Times New Roman', 17, 'bold'))
         self.log_display_label.pack(side="right", padx=(0, 450))
+
+    def quit_gui(self): 
+        if self.usergui_process: 
+            self.usergui_process.terminate()
+        self.quit()
+        self.destroy()

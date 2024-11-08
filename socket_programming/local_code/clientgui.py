@@ -10,7 +10,6 @@ try:
     config = configparser.ConfigParser()
     config.read(os.path.join(script_dir, 'config.ini'))
     server_ip = config['client']['server_ip']
-    mode = config['client']['mode']
 except: 
     pass
 
@@ -69,6 +68,5 @@ class clientGUI(tk.Tk):
         subprocess.run(["powershell.exe", "-ExecutionPolicy", "Bypass", "-File", script_path, target_client, server_request])
 
 if __name__ == "__main__": 
-    gui = clientGUI(server_ip)
+    gui = clientGUI("192.168.1.224")
     gui.mainloop()
-    

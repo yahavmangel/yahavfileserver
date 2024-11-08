@@ -20,7 +20,7 @@ function Get-VMStatus {
     }
 }
 
-foreach ($vm in $vmList) {
+foreach ($vm in $vmList2) {
     if ($Action -eq "start") {
         Write-Host "Starting VM: $vm"
         & "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" startvm $vm --type headless
@@ -33,10 +33,10 @@ foreach ($vm in $vmList) {
     }
 }
 
-foreach ($vm in $vmList2) {
+foreach ($vm in $vmList) {
     if ($Action -eq "start") {
         Write-Host "Starting VM: $vm"
-        & "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" startvm $vm --type gui
+        & "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" startvm $vm --type headless
     } elseif ($Action -eq "stop") {
         Write-Host "Stopping VM: $vm"
         & "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" controlvm $vm acpipowerbutton

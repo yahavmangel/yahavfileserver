@@ -13,6 +13,7 @@ import os
 import sys
 import queue
 from localgui import localGUI
+import subprocess
 
 class CustomFormatter(logging.Formatter):
     """
@@ -59,7 +60,6 @@ try:
     port = int(config['local']['port'])                         # port for external communication
 
     # info for local GUI
-    mode_num = int(config['local']['mode'])
     domain = config['local']['domain']
     domain_controller_ip = config['local']['domain_controller_ip']
     server_ip = config['local']['server_ip']
@@ -163,34 +163,33 @@ def process_usr_prompt(usr_prompt, conn):
         case "PRINT":
             print(usr_prompt[MSG_PREFIX2_LEN:])                 # if print, print to console
 
-def launch_gui():
-    gui = localGUI(log_queue, None, None, mode_num, domain, server_ip, domain_controller_ip, local_ip, ldap_server)
+def launch_gui(mode_num, usergui_process):
+    gui = localGUI(log_queue, None, None, mode_num, domain, server_ip, domain_controller_ip, local_ip, ldap_server, usergui_process)
     gui.mainloop()
+    sys.exit() # if main gui is done, terminate whole localserver
 
 if __name__ == "__main__":
 
-    logger.info("Launching local GUI...",
-                extra={'loggername':"localserver", 'conn_counter': "N/A"})
+    usergui_process = None
+    mode_num = int(sys.argv[1])
+    if mode_num == 2:
+        usergui_process = subprocess.Popen(["python3", os.path.join(script_dir, 'clientgui.py')])
 
     # launch gui thread
 
-    gui_thread = threading.Thread(target=launch_gui)
+    gui_thread = threading.Thread(target=launch_gui, args=(mode_num, usergui_process))
     gui_thread.daemon = True
     gui_thread.start()
 
     # main localserver loop 
+    local_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    local_sock.bind(('0.0.0.0', port))
+    local_sock.listen(50)
 
-    try: 
-        local_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        local_sock.bind(('0.0.0.0', port))
-        local_sock.listen(50)
+    logger.info("localserver is listening...",
+                extra={'loggername':"localserver", 'conn_counter': "N/A"})
 
-        logger.info("localserver is listening...",
-                    extra={'loggername':"localserver", 'conn_counter': "N/A"})
-
-        while True:
-            conn, addr = local_sock.accept()
-            local_thread = threading.Thread(target=local_handler, args=(conn,))
-            local_thread.start()
-    except: 
-        pass
+    while True:
+        conn, addr = local_sock.accept()
+        local_thread = threading.Thread(target=local_handler, args=(conn,))
+        local_thread.start()
