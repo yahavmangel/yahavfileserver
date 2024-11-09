@@ -7,12 +7,38 @@ $servers = @(
     @{Name="fileserver"; IP="192.168.1.224"; User="fileserver"; ScriptPath="server-code/server.py"}
 )
 
-# start localserver
+# start localserver and fetch its process ID
 Start-Process python3 -ArgumentList "$PSScriptRoot\..\socket_programming\local_code\localserver.py $mode"
 $local_process_id = (Get-WmiObject -Class Win32_Process | Where-Object { $_.CommandLine -like "*localserver*" } | Select-Object -ExpandProperty ProcessId)
 
+# set up socket connection with localserver 
+$connected = $false
+while(-not $connected) {
+    try {
+        $local_sock = New-Object System.Net.Sockets.TCPClient("localhost", 12344)
+        $local_stream = $local_sock.GetStream()
+        $local_sock_writer = New-Object System.IO.StreamWriter($local_stream)
+        $local_sock_reader = New-Object System.IO.StreamReader($local_stream)
+        $connected = $true
+        $local_sock_writer.Write("ping")
+        $local_sock_writer.Flush()
+        Write-Host "Connected to localserver successfully."
+        $connected = $true
+    }
+    catch { 
+        Start-Sleep -Seconds 1 
+        Write-Host "Connecting to localserver..."
+    }
+}
+
+$local_sock_writer.Write("0") # "Booting VMs..."
+$local_sock_writer.Flush()
+
 # start all VMs (using manage_vms script)
 powershell -File "$PSScriptRoot\manage_vms.ps1" -Action "Start"
+
+$local_sock_writer.Write("1") # "Connecting to server..."
+$local_sock_writer.Flush()
 
 # wait for ssh to be ready 
 foreach ($vm in $servers) {
@@ -51,23 +77,38 @@ foreach ($vm in $servers) {
     } -ArgumentList $sshCommand
 }
 
-# after this, the rest of the workflow will be handled by either user mode GUI (user mode), automated tests (test mode), or localserver GUI (dev mode)
+$local_sock_writer.Write("2") # "Connected!"
+$local_sock_writer.Flush()
 
-# After workflow is done: graceful termination of the server. Maybe broadcast a message to all server elements via TCP to tell them that the server is closing?
+# The rest of the workflow will be handled by either user mode GUI (user mode), automated tests (test mode), or localserver GUI (dev mode)
 
-while (Get-Process -Id $local_process_id -ErrorAction SilentlyContinue) {
-    Start-Sleep -Seconds 1  # Wait until the local server process finishes
+# After workflow is done: perform graceful termination of the server. Broadcast a message to all server elements to gracefully close.
+
+while ($true) {
+    if ($local_sock_reader.Peek() -ge 0) { # check if there's data to read 
+        $message = $local_sock_reader.ReadLine()
+        if ($message -eq "SHUTDOWN") {
+            Write-Host "Received SHUTDOWN message. Terminating..."
+            
+            # close the connection and exit
+            $local_sock_reader.Close()
+            $local_sock_writer.Close()
+            $local_stream.Close()
+            $local_sock.Close()
+            break
+        }
+    }
+    Start-Sleep -Seconds 1
 }
 
 # close all VMs (using manage_vms script)
 powershell -File "$PSScriptRoot\manage_vms.ps1" -Action "Stop"
 
-# close local server 
+# close local server process 
 
 Stop-Process -Id $local_process_id -Force
 
 # current challenges/to do: 
-    # fix quit button on local GUI!!!!!!
     # update localserver GUI with status of app (launching VMs, connecting to servers, etc.) As a matter of fact, just display all the print dialog on GUI
     # integrate prompts/prints into user GUI.. essentially make a terminal. As part of this, figure out when to disable/enable text boxes. 
     # combine logs, request execution, and prompts/prints into one 'dev mode' GUI. 

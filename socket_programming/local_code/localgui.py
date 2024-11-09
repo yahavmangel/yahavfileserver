@@ -1,8 +1,9 @@
 import tkinter as tk
 import subprocess
+import threading
 
 class localGUI(tk.Tk): 
-    def __init__(self, log_queue, print_queue, prompt_queue, mode_num, domain_name, server_ip, domain_controller_ip, local_ip, ldap_server, usergui_process):
+    def __init__(self, log_queue, print_queue, prompt_queue, mode_num, domain_name, server_ip, domain_controller_ip, local_ip, ldap_server, usergui_process, event_arr):
         super().__init__()
         
         # main setup
@@ -20,9 +21,11 @@ class localGUI(tk.Tk):
         self.cur_display_idx = 0
         self.prev_display_idx = -1
         self.usergui_process = usergui_process
-
+        self.event_arr = event_arr
         # create top frame for static information
         self.init_top_frame(mode_num, domain_name, server_ip, domain_controller_ip, local_ip, ldap_server)
+
+        self.after(100, self.switch_status)
 
         # create rest of GUI based on mode
 
@@ -70,17 +73,22 @@ class localGUI(tk.Tk):
     def launch_user_mode(self):
 
         # create log title frames
+
+        self.status_text_arr = ["Launching VMs...", "Connecting to server...", "Connected!"]
+
         log_title_frame = tk.Frame(self, bg="lightgrey")
         log_title_frame.grid(row=1, column=0, sticky="nsew")
         log_title_frame.grid_propagate(False)
-        log_label_frame = tk.Frame(log_title_frame, bg="lightgrey")
-        log_label_frame.pack(side="left")
-        log_label = tk.Label(log_label_frame, text='Select Log Source:', bg="lightgrey", font=('Times New Roman', 15, 'bold'), padx=20)
+        self.log_label_frame = tk.Frame(log_title_frame, bg="lightgrey")
+        self.log_label_frame.pack(side="left")
+        log_label = tk.Label(self.log_label_frame, text='Select Log Source:', bg="lightgrey", font=('Times New Roman', 15, 'bold'), padx=20)
         log_label.pack(side="left")
         self.log_display_label = tk.Label(log_title_frame, bg="lightgrey", text='Aggregate Logs', font=('Times New Roman', 17, 'bold'))
         self.log_display_label.pack(side="right", padx=(0, 450), fill="x")
-        quit_button = tk.Button(log_label_frame, text="Quit", command=self.quit_gui)
+        quit_button = tk.Button(self.log_label_frame, text="Quit", command=self.quit_gui)
         quit_button.pack(side="right")
+        self.status_label = tk.Label(self.log_label_frame, text=self.status_text_arr[0])
+        self.status_label.pack(side="right")
         # create main frame
         main_frame = tk.Frame(self, width=118, height=613, bg="lightgrey", relief="ridge", bd=5)
         main_frame.grid(row=2, column=0, sticky="nsew")
@@ -179,8 +187,17 @@ class localGUI(tk.Tk):
         self.log_display_label = tk.Label(log_title_frame, bg="lightgrey", text=f'{self.log_src_arr[self.cur_display_idx]} Logs', font=('Times New Roman', 17, 'bold'))
         self.log_display_label.pack(side="right", padx=(0, 450))
 
+    def switch_status(self):
+        self.status_label.pack_forget()
+        cur_status_idx = max((i for i in range(len(self.event_arr)) if all(self.event_arr[j].is_set() for j in range(i+1))), default=0)
+        self.status_label = tk.Label(self.log_label_frame, text=self.status_text_arr[cur_status_idx])
+        self.status_label.pack(side="right")
+        if cur_status_idx < 2: # stop when reached 'connected' phase 
+            self.after(100, self.switch_status)
+
     def quit_gui(self): 
         if self.usergui_process: 
             self.usergui_process.terminate()
         self.quit()
         self.destroy()
+        self.event_arr[3].set()

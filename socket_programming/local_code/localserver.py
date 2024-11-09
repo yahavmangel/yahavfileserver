@@ -1,58 +1,28 @@
 """
 Run the localserver, which is responsible for the following: 
-- Acts as central logserver 
-- Acts as receiver of user prompts (print and input)
-- Launches "Desktop GUI"
+- Acts as central logserver (all modes)
+- Acts as receiver of user prompts (dev mode)
+- Launches "Desktop GUI" that does the following:
+    - Display logs (all modes)
+    - Display/interact with user prompts (dev mode)
+    - Launch client requests (dev/test modes)
+    - Launch automated tests (test mode)
 """
 import socket
 import configparser
 import threading
 import json
-import logging
 import os
 import sys
 import queue
 from localgui import localGUI
 import subprocess
 
-class CustomFormatter(logging.Formatter):
-    """
-    Custom logging formatter that either includes/excludes 'conn_counter' attribute from the log.
-
-    The 'conn_counter' attribute is the connection ID, which can be used by admins to distinguish 
-    between each server connection in the aggregate log. When a logger does not know what ID their 
-    log is associated with, they pass "N/A" to this attribute. This formatter will then remove the 
-    attribute entirely.  
-    """
-
-    def format(self, record):
-
-        # Exclude conn_counter from the log if it's "N/A"
-        if getattr(record, 'conn_counter', 'N/A') == "N/A":
-            log_msg = f"({record.loggername}) {record.levelname}: {record.msg}"
-        else:
-            log_msg = (
-                f"({record.loggername}, ID: {record.conn_counter}) "
-                f"{record.levelname}: {record.msg}"
-            )
-        return log_msg
-
 # logging and metadata
 
 script_dir = os.path.dirname(os.path.abspath(__file__))         # make script execution dynamic
-
 log_queue = queue.Queue()                                       # instantiate thread safe log queue
-logger = logging.getLogger("YFS")
-logger.setLevel(logging.DEBUG)
-
-if logger.hasHandlers():                                        # remove default handler
-    logger.handlers.clear()
-
-formatter = CustomFormatter()                                   # instantiate custom formatter
-file_handler = logging.FileHandler(os.path.join(script_dir, 'YFS.log'), mode='w')
-file_handler.setFormatter(formatter)                            # set formatter to the custom one
-logger.addHandler(file_handler)
-logger.propagate = False                                        # stop root log from existing
+event_arr = [threading.Event() for _ in range(4)]
 
 try:
     config = configparser.ConfigParser()
@@ -67,7 +37,8 @@ try:
     ldap_server = config['local']['ldap_server']
 
 except KeyError:                                                # case of misconfigured config file
-    logger.critical("Missing or misconfigured config file", extra={'conn_counter': "N/A"})
+    log_queue.put(("CRITICAL", "Missing or misconfigured config file",
+                   {'loggername': "localserver", 'conn_counter': "N/A"}))
     sys.exit(1)
 
 # magic numbers
@@ -77,30 +48,6 @@ MSG_PREFIX_LEN = 3
 MSG_PREFIX2_LEN = 5
 
 # main code
-
-def logger_thread():
-    """
-    Extra thread responsible for processing incoming logs in parallel with 
-    the local server polling for them. This makes for much faster log processing.
-    All incoming logs are placed in the log queue. This thread will then dequeue 
-    and write the oldest log. 
-    """
-    # while True:
-    #     level, message, extra = log_queue.get()
-    #     if level == "DEBUG":
-    #         logger.debug(message, extra=extra)
-    #     elif level == "INFO":
-    #         logger.info(message, extra=extra)
-    #     elif level == "WARNING":
-    #         logger.warning(message, extra=extra)
-    #     elif level == "ERROR":
-    #         logger.error(message, extra=extra)
-    #     elif level == "CRITICAL":
-    #         logger.critical(message, extra=extra)
-    #     log_queue.task_done()
-
-
-threading.Thread(target=logger_thread, daemon=True).start()     # Start the logger thread
 
 def local_handler(conn):
     """
@@ -128,7 +75,6 @@ def local_handler(conn):
                 case "USR":                                     # data has USR prefix: user prompt
                     usr_prompt = message[MSG_PREFIX_LEN:]
                     process_usr_prompt(usr_prompt, conn)
-
     conn.close()
 
 def process_log_entry(log_entry):
@@ -163,21 +109,38 @@ def process_usr_prompt(usr_prompt, conn):
         case "PRINT":
             print(usr_prompt[MSG_PREFIX2_LEN:])                 # if print, print to console
 
-def launch_gui(mode_num, usergui_process):
-    gui = localGUI(log_queue, None, None, mode_num, domain, server_ip, domain_controller_ip, local_ip, ldap_server, usergui_process)
+def launch_gui(mode_num, usergui_process, event_arr):
+    gui = localGUI(log_queue, None, None, mode_num, domain, server_ip, domain_controller_ip, local_ip, ldap_server, usergui_process, event_arr)
     gui.mainloop()
-    sys.exit() # if main gui is done, terminate whole localserver
+
+def app_handler(conn):
+    while 1: 
+        status = conn.recv(1).decode('utf-8')
+        if status.isdigit():
+            event_arr[int(status)].set()
+            if(int(status) == 2): # if server connected 
+                break
+    while not event_arr[3].is_set():
+        continue
+    if event_arr[3].is_set(): 
+        conn.sendall(b'SHUTDOWN')
+        conn.close()
 
 if __name__ == "__main__":
 
     usergui_process = None
     mode_num = int(sys.argv[1])
-    if mode_num == 2:
+
+    if mode_num == 2: # on user mode, launch user gui (comment this out during normal client use)
+
+        log_queue.put(("INFO", "Starting client GUI...",
+                   {'loggername': "localserver", 'conn_counter': "N/A"}))
+
         usergui_process = subprocess.Popen(["python3", os.path.join(script_dir, 'clientgui.py')])
 
     # launch gui thread
 
-    gui_thread = threading.Thread(target=launch_gui, args=(mode_num, usergui_process))
+    gui_thread = threading.Thread(target=launch_gui, args=(mode_num, usergui_process, event_arr))
     gui_thread.daemon = True
     gui_thread.start()
 
@@ -186,10 +149,15 @@ if __name__ == "__main__":
     local_sock.bind(('0.0.0.0', port))
     local_sock.listen(50)
 
-    logger.info("localserver is listening...",
-                extra={'loggername':"localserver", 'conn_counter': "N/A"})
+    log_queue.put(("INFO", "localserver is listening...",
+                   {'loggername': "localserver", 'conn_counter': "N/A"}))
 
     while True:
         conn, addr = local_sock.accept()
-        local_thread = threading.Thread(target=local_handler, args=(conn,))
-        local_thread.start()
+        match addr[0]:
+            case "127.0.0.1":   # loopback address: this is the app powershell script communicating status!
+                app_thread = threading.Thread(target=app_handler, args=(conn,))
+                app_thread.start()
+            case _:             # otherwise: clients to the local server. 
+                local_thread = threading.Thread(target=local_handler, args=(conn,))
+                local_thread.start()
