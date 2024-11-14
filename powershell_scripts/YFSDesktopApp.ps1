@@ -7,9 +7,8 @@ $servers = @(
     @{Name="fileserver"; IP="192.168.1.224"; User="fileserver"; ScriptPath="server-code/server.py"}
 )
 
-# start localserver and fetch its process ID
-Start-Process python3 -ArgumentList "$PSScriptRoot\..\socket_programming\local_code\localserver.py $mode"
-$local_process_id = (Get-WmiObject -Class Win32_Process | Where-Object { $_.CommandLine -like "*localserver*" } | Select-Object -ExpandProperty ProcessId)
+# start localserver
+Start-Process -NoNewWindow python3 -ArgumentList "$PSScriptRoot\..\socket_programming\local_code\localserver.py $mode"
 
 # set up socket connection with localserver 
 $connected = $false
@@ -103,10 +102,6 @@ while ($true) {
 
 # close all VMs (using manage_vms script)
 powershell -File "$PSScriptRoot\manage_vms.ps1" -Action "Stop"
-
-# close local server process 
-
-Stop-Process -Id $local_process_id -Force
 
 # current challenges/to do: 
     # update localserver GUI with status of app (launching VMs, connecting to servers, etc.) As a matter of fact, just display all the print dialog on GUI

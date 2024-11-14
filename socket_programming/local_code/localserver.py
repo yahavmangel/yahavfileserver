@@ -22,13 +22,14 @@ import subprocess
 
 script_dir = os.path.dirname(os.path.abspath(__file__))         # make script execution dynamic
 log_queue = queue.Queue()                                       # instantiate thread safe log queue
+prompt_queue = queue.Queue()
 event_arr = [threading.Event() for _ in range(4)]
 
 try:
     config = configparser.ConfigParser()
     config.read(os.path.join(script_dir, 'config.ini'))
     port = int(config['local']['port'])                         # port for external communication
-
+    port2 = int(config['local']['port2'])
     # info for local GUI
     domain = config['local']['domain']
     domain_controller_ip = config['local']['domain_controller_ip']
@@ -101,20 +102,21 @@ def process_usr_prompt(usr_prompt, conn):
         usr_prompt: the received prompt
         conn: connection to client
     """
-
     match usr_prompt[:MSG_PREFIX2_LEN]:
         case "INPUT":
-            to_client = input(usr_prompt[MSG_PREFIX2_LEN:])     # if input, prompt user
-            conn.sendall(to_client.encode('utf-8'))             # send response back to client
+            prompt_queue.put("INPUT", usr_prompt[MSG_PREFIX2_LEN:])
         case "PRINT":
-            print(usr_prompt[MSG_PREFIX2_LEN:])                 # if print, print to console
+            prompt_queue.put("PRINT", usr_prompt[MSG_PREFIX2_LEN:])
 
-def launch_gui(mode_num, usergui_process, event_arr):
-    gui = localGUI(log_queue, None, None, mode_num, domain, server_ip, domain_controller_ip, local_ip, ldap_server, usergui_process, event_arr)
-    gui.mainloop()
+    # match usr_prompt[:MSG_PREFIX2_LEN]:
+    #     case "INPUT":
+    #         to_client = input(usr_prompt)                 # if input, prompt user
+    #         conn.sendall(to_client.encode('utf-8'))             # send response back to client
+    #     case "PRINT":
+    #         print(usr_prompt)                              # if print, print to console
 
 def app_handler(conn):
-    while 1: 
+    while True: 
         status = conn.recv(1).decode('utf-8')
         if status.isdigit():
             event_arr[int(status)].set()
@@ -125,6 +127,30 @@ def app_handler(conn):
     if event_arr[3].is_set(): 
         conn.sendall(b'SHUTDOWN')
         conn.close()
+
+def server_loop(local_sock):
+
+    log_queue.put(("INFO", "localserver is listening for logs...",
+        {'loggername': "localserver", 'conn_counter': "N/A"}))
+    
+    try: 
+        local_sock.bind(('0.0.0.0', port))
+        local_sock.listen(50)
+    except OSError: 
+        pass
+
+    while True:
+        try: 
+            conn, addr = local_sock.accept()
+            match addr[0]:
+                case "127.0.0.1":   # loopback address: this is the app powershell script communicating app status!
+                    app_thread = threading.Thread(target=app_handler, args=(conn,))
+                    app_thread.start()
+                case _:             # otherwise: clients to the local server. 
+                    local_thread = threading.Thread(target=local_handler, args=(conn,))
+                    local_thread.start()
+        except OSError: # if socket was closed by gui thread
+            break
 
 if __name__ == "__main__":
 
@@ -138,26 +164,23 @@ if __name__ == "__main__":
 
         usergui_process = subprocess.Popen(["python3", os.path.join(script_dir, 'clientgui.py')])
 
-    # launch gui thread
-
-    gui_thread = threading.Thread(target=launch_gui, args=(mode_num, usergui_process, event_arr))
-    gui_thread.daemon = True
-    gui_thread.start()
-
-    # main localserver loop 
+    # set up localserver socket
     local_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    local_sock.bind(('0.0.0.0', port))
-    local_sock.listen(50)
+    
+    # start main localserver loop 
+    server_loop_thread = threading.Thread(target=server_loop, args=(local_sock,))
+    server_loop_thread.start()
 
-    log_queue.put(("INFO", "localserver is listening...",
-                   {'loggername': "localserver", 'conn_counter': "N/A"}))
+    # launch gui
+    gui_static_info_dict = {
+        "Domain": domain,
+        "Server IP": server_ip,
+        "Domain Controller IP": domain_controller_ip,
+        "Local Server IP": local_ip,
+        "LDAP Server": ldap_server,
+        "Mode": mode_num
+    }
 
-    while True:
-        conn, addr = local_sock.accept()
-        match addr[0]:
-            case "127.0.0.1":   # loopback address: this is the app powershell script communicating status!
-                app_thread = threading.Thread(target=app_handler, args=(conn,))
-                app_thread.start()
-            case _:             # otherwise: clients to the local server. 
-                local_thread = threading.Thread(target=local_handler, args=(conn,))
-                local_thread.start()
+    gui = localGUI(log_queue, prompt_queue, usergui_process, event_arr, gui_static_info_dict)
+    gui.mainloop()
+    local_sock.close() # reaches after gui quit 
