@@ -7,7 +7,7 @@ class localGUI(tk.Tk):
 
 ################ ALL MODES ##################
 
-    def __init__(self, log_queue, prompt_queue, usergui_process, event_arr, static_info_dict):
+    def __init__(self, log_queue, prompt_queue, event_arr, static_info_dict):
         super().__init__()
         
         # main setup
@@ -23,7 +23,6 @@ class localGUI(tk.Tk):
         self.log_text_arr = [tk.Text()]
         self.cur_display_idx = 0
         self.prev_display_idx = -1
-        self.usergui_process = usergui_process
         self.event_arr = event_arr
         mode_text_arr = ["Developer", "Test", "User"]
         static_info_dict["Mode"] = mode_text_arr[static_info_dict["Mode"]] # convert mode number to mode name
@@ -83,8 +82,6 @@ class localGUI(tk.Tk):
             self.after(100, self.switch_status)
 
     def quit_gui(self): 
-        if self.usergui_process: 
-            self.usergui_process.terminate()
         self.quit()
         self.destroy()
         self.event_arr[3].set()

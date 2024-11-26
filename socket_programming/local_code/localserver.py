@@ -133,11 +133,9 @@ def server_loop(local_sock):
     log_queue.put(("INFO", "localserver is listening for logs...",
         {'loggername': "localserver", 'conn_counter': "N/A"}))
     
-    try: 
-        local_sock.bind(('0.0.0.0', port))
-        local_sock.listen(50)
-    except OSError: 
-        pass
+
+    local_sock.bind(('0.0.0.0', port))
+    local_sock.listen(50)
 
     while True:
         try: 
@@ -153,16 +151,8 @@ def server_loop(local_sock):
             break
 
 if __name__ == "__main__":
-
-    usergui_process = None
+    
     mode_num = int(sys.argv[1])
-
-    if mode_num == 2: # on user mode, launch user gui (comment this out during normal client use)
-
-        log_queue.put(("INFO", "Starting client GUI...",
-                   {'loggername': "localserver", 'conn_counter': "N/A"}))
-
-        usergui_process = subprocess.Popen(["python3", os.path.join(script_dir, 'clientgui.py')])
 
     # set up localserver socket
     local_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -181,6 +171,6 @@ if __name__ == "__main__":
         "Mode": mode_num
     }
 
-    gui = localGUI(log_queue, prompt_queue, usergui_process, event_arr, gui_static_info_dict)
+    gui = localGUI(log_queue, prompt_queue, event_arr, gui_static_info_dict)
     gui.mainloop()
     local_sock.close() # reaches after gui quit 

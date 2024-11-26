@@ -4,19 +4,19 @@ import os
 import threading
 import configparser
 import socket 
+import queue 
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
 try: 
     config = configparser.ConfigParser()
     config.read(os.path.join(script_dir, 'config.ini'))
-    server_ip = config['local']['server_ip']
-    port2 = int(config['local']['port2'])
+    server_ip = config['client']['server_ip']
 except: 
     pass
 
 class clientGUI(tk.Tk):
-    def __init__(self, server_ip): 
+    def __init__(self, server_ip, launch_request, prompt_queue, resp_queue): 
         super().__init__()
         
         # main setup
@@ -25,12 +25,16 @@ class clientGUI(tk.Tk):
 
         # create static top frame
         self.init_top_frame(server_ip)
+        self.launch_request = launch_request # function that executes client request
+        self.prompt_queue = prompt_queue
+        self.resp_queue = resp_queue
+        self.resp_queue2 = queue.Queue()     # intermediate queue for processing
 
         # launch rest of GUI 
         self.launch_user_gui()
 
     def init_top_frame(self, server_ip):
-        self.top_frame = tk.Frame(self, height=155, bg="lightblue", relief="ridge", bd=5)
+        self.top_frame = tk.Frame(self, height=85, bg="lightblue", relief="ridge", bd=5)
         self.grid_columnconfigure(0, weight=1)
         self.top_frame.grid(column=0, row=0, sticky="ew")
         self.top_frame.pack_propagate(False)  # prevent children widgets from changing frame
@@ -65,7 +69,7 @@ class clientGUI(tk.Tk):
         self.prompt_frame.grid_rowconfigure(4, minsize=25)
         self.prompt_label = tk.Label(self.prompt_frame, font=('Times New Roman', 30), text="Server console", bg="lightgrey")
         self.prompt_label.grid(column=0, row=0, sticky="n", pady=10)
-        self.prompt_text = tk.Text(self.prompt_frame, wrap=tk.WORD, bg="white", height = 8, width=140)
+        self.prompt_text = tk.Text(self.prompt_frame, wrap=tk.WORD, bg="white", height=8, width=140)
         self.prompt_text.grid(column=0, row=1, sticky="nsew", padx=34)
 
         self.prompt_label2 = tk.Label(self.prompt_frame, font=('Times New Roman', 25), text="Enter Responses Here:", bg="lightgrey")
@@ -76,24 +80,44 @@ class clientGUI(tk.Tk):
         self.prompt_resp_submit_button = tk.Button(self.prompt_frame, text="Send", command=self.get_prompt_response, width=20)
         self.prompt_resp_submit_button.grid(column=0, row=4)
 
+        self.after(100, self.check_for_prompts)
+
+    def check_for_prompts(self):
+        while not self.prompt_queue.empty(): 
+            message, prompt_type = self.prompt_queue.get()
+            match prompt_type:
+                case "print":
+                    self.prompt_text.insert(tk.END, message + '\n')
+                    self.prompt_text.yview(tk.END) # auto-scroll to the end
+                case "prompt":
+                    self.prompt_text.insert(tk.END, message + '\n')
+                    self.prompt_text.yview(tk.END) # auto-scroll to the end
+                    threading.Thread(target=self.ret_resp).start()
+
+        self.after(100, self.check_for_prompts)
+
+    def ret_resp(self):
+        while self.resp_queue2.empty(): 
+            pass
+        if not self.resp_queue2.empty():
+            response = self.resp_queue2.get()
+            self.resp_queue.put((response))
+            self.prompt_text.delete('1.0', 'end')
+
     def get_prompt_response(self):
         prompt_response = self.prompt_entry.get()
         if prompt_response:
             self.prompt_entry.delete(0, tk.END)
-        # add more functionality here when tried on actual client machine
+            self.resp_queue2.put((prompt_response))
+
     def get_user_input(self):
         user_input = self.command_entry.get()
         if user_input: 
             self.command_entry.delete(0, tk.END)
-            request_thread = threading.Thread(target=self.execute_request, args=(user_input,))
+            command, filename = (user_input.split(" ", 2)[0], user_input.split(" ", 2)[1])
+            request_thread = threading.Thread(target=self.launch_request, args=(command, filename))
             request_thread.daemon = True
             request_thread.start()
-
-    def execute_request(self, user_input):
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        script_path = os.path.join(script_dir, "../../powershell_scripts/execute_request.ps1")
-        target_client, server_request = user_input.split(" ", 2)[0], " ".join(user_input.split(" ", 2)[1:])
-        subprocess.run(["powershell.exe", "-ExecutionPolicy", "Bypass", "-File", script_path, target_client, server_request])
 
 if __name__ == "__main__": 
     gui = clientGUI(server_ip)

@@ -17,7 +17,10 @@ import os
 import zipfile
 import configparser
 import logging
+import threading
 from loghandler import JSONSocketHandler
+from clientgui import clientGUI
+import queue
 
 # logging and metadata
 
@@ -26,6 +29,9 @@ login_name = os.getlogin()
 
 logger = logging.getLogger(login_name)
 logger.setLevel(logging.DEBUG)
+
+prompt_queue = queue.Queue()                                    # make queue for user prompts
+resp_queue = queue.Queue()                                      # make queue for user responses
 
 try:                                                            # collect config file info
     config = configparser.ConfigParser()
@@ -36,6 +42,7 @@ try:                                                            # collect config
     port2 = int(config['client']['port2'])                      # port for connection w/ localserver
     target_dir = os.path.join(script_dir,
                               config['client']['target_dir'])   # target dir of operations
+    mode = config['client']['mode']
 except KeyError:                                                # case of misconfigured config file
     logger.critical("Missing or misconfigured config file")
     sys.exit(1)
@@ -381,6 +388,7 @@ def send_client_msg(client_socket, msg):
         client_socket: the socket holding the connection with the server. 
         msg: desired message to server 
     """
+            
     logger.debug("%s -> server: %s", login_name, msg)
     client_socket.sendall(command_table[msg].encode())
 
@@ -393,25 +401,44 @@ def send_prompt(message, prompt_type):
         type: print or input
     """
 
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.connect((local_ip, port2))
+    match mode: 
+        case "2": 
+            prompt_queue.put((message, prompt_type))
+            if prompt_type == "prompt":
+                while resp_queue.empty():                   # wait for user resp
+                    pass
+                while not resp_queue.empty():
+                    return resp_queue.get()
+            
+        case _:
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.connect((local_ip, port2))
 
-        match prompt_type:
-            case "prompt":
-                msg = 'USRINPUT' + message + 'END'
-                sock.sendall(msg.encode('utf-8'))
+                match prompt_type:
+                    case "prompt":
+                        msg = 'USRINPUT' + message + 'END'
+                        sock.sendall(msg.encode('utf-8'))
 
-                # wait for prompt response
-                return sock.recv(BUF_SIZE_SMALL).decode('utf-8')
-            case "print":
-                msg = 'USRPRINT' + message + 'END'
-                sock.sendall(msg.encode('utf-8'))
-                return 1
-        sock.close()
-    except Exception:
-        logger.critical("localserver unreachable. Exiting.")
-        sys.exit(1)
+                        # wait for prompt response
+                        return sock.recv(BUF_SIZE_SMALL).decode('utf-8')
+                    case "print":
+                        msg = 'USRPRINT' + message + 'END'
+                        sock.sendall(msg.encode('utf-8'))
+                        return 1
+                sock.close()
+            except Exception:
+                logger.critical("localserver unreachable. Exiting.")
+                sys.exit(1)
+
+def launch_request(command, filename):
+    req_thread = threading.Thread(target=server_request, args=(command, filename))
+    req_thread.start()
 
 if __name__ == "__main__":
-    server_request(sys.argv[1], sys.argv[2])
+    match mode: 
+        case "2": 
+            gui = clientGUI(server_ip, launch_request, prompt_queue, resp_queue)
+            gui.mainloop()
+        case _: 
+            server_request(sys.argv[1], sys.argv[2])
