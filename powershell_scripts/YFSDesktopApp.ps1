@@ -1,14 +1,10 @@
-param (
-    [int] $mode = 2
-)
-
 $servers = @(
     @{Name="DC"; IP="192.168.1.225"; User="Administrator"; ScriptPath="C:\Users\Administrator\Desktop\dc_code\dc.py"}
     @{Name="fileserver"; IP="192.168.1.224"; User="fileserver"; ScriptPath="server-code/server.py"}
 )
 
 # start localserver
-Start-Process -NoNewWindow python3 -ArgumentList "$PSScriptRoot\..\socket_programming\local_code\localserver.py $mode"
+Start-Process -NoNewWindow python3 -ArgumentList "$PSScriptRoot\..\socket_programming\local_code\localserver.py"
 
 # set up socket connection with localserver 
 $connected = $false

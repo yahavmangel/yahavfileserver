@@ -1,12 +1,3 @@
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
-function Send-Keys {
-    param (
-        [string]$keys
-    )
-    [System.Windows.Forms.SendKeys]::SendWait($keys)
-}
-
 $servers = @(
     @{Name="fileserver"; IP="192.168.1.224"; User="fileserver"; ScriptPath="server-code\server.py"; ScriptPath2="server-code\config.ini"; ScriptPath3="server-code\loghandler.py"; ScriptPath4="server-code\auth.py"}
 )

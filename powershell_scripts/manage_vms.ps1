@@ -6,7 +6,7 @@ param (
 $vmList = VBoxManage list vms | Select-String -Pattern 'client.*' | ForEach-Object {
     $_.Line -replace '.*"([^"]+)".*', '$1'
 }
-$vmList2 = @("administrator", "fileserver")
+$vmList2 = @("administrator", "fileserver", "vinitgv2")
 function Get-VMStatus {
     param (
         [string]$VMName
@@ -33,15 +33,15 @@ foreach ($vm in $vmList2) {
     }
 }
 
-foreach ($vm in $vmList) {
-    if ($Action -eq "start") {
-        Write-Host "Starting VM: $vm"
-        & "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" startvm $vm --type headless
-    } elseif ($Action -eq "stop") {
-        Write-Host "Stopping VM: $vm"
-        & "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" controlvm $vm acpipowerbutton
-    } elseif ($Action -eq "status") {
-        $status = Get-VMStatus -VMName $vm
-        Write-Host "VM: $vm, Status: $status"
-    }
-}
+# foreach ($vm in $vmList) {
+#     if ($Action -eq "start") {
+#         Write-Host "Starting VM: $vm"
+#         & "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" startvm $vm --type headless
+#     } elseif ($Action -eq "stop") {
+#         Write-Host "Stopping VM: $vm"
+#         & "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" controlvm $vm acpipowerbutton
+#     } elseif ($Action -eq "status") {
+#         $status = Get-VMStatus -VMName $vm
+#         Write-Host "VM: $vm, Status: $status"
+#     }
+# }

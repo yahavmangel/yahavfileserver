@@ -20,7 +20,7 @@ class clientGUI(tk.Tk):
         super().__init__()
         
         # main setup
-        self.geometry('1200x800')
+        self.geometry('1200x730')
         self.title("YahavFileServer Client")
 
         # create static top frame
@@ -28,10 +28,12 @@ class clientGUI(tk.Tk):
         self.launch_request = launch_request # function that executes client request
         self.prompt_queue = prompt_queue
         self.resp_queue = resp_queue
-        self.resp_queue2 = queue.Queue()     # intermediate queue for processing
 
         # launch rest of GUI 
         self.launch_user_gui()
+
+        self.processing_thread = threading.Thread(target=self.process_prompts, daemon=True)
+        self.processing_thread.start()
 
     def init_top_frame(self, server_ip):
         self.top_frame = tk.Frame(self, height=85, bg="lightblue", relief="ridge", bd=5)
@@ -80,45 +82,44 @@ class clientGUI(tk.Tk):
         self.prompt_resp_submit_button = tk.Button(self.prompt_frame, text="Send", command=self.get_prompt_response, width=20)
         self.prompt_resp_submit_button.grid(column=0, row=4)
 
-        self.after(100, self.check_for_prompts)
+    def process_prompts(self):
+        while True:
+            try: 
+                message, prompt_type = self.prompt_queue.get_nowait()  # Block until message arrives
+                self.add_prompt_message(message, prompt_type)
+                tries = 0
+                while tries < 50:
+                    message, prompt_type = self.prompt_queue.get(timeout=0.02)
+                    self.add_prompt_message(message, prompt_type)
+                    tries += 1
+            except queue.Empty:
+                pass
+    def add_prompt_message(self, message, prompt_type):
+        self.prompt_text.insert(tk.END, message + '\n')
+        if self.prompt_text.yview()[1] == 1.0:  # Check if we're already at the bottom
+            self.prompt_text.yview(tk.END)  # auto-scroll to the end
 
-    def check_for_prompts(self):
-        while not self.prompt_queue.empty(): 
-            message, prompt_type = self.prompt_queue.get()
-            match prompt_type:
-                case "print":
-                    self.prompt_text.insert(tk.END, message + '\n')
-                    self.prompt_text.yview(tk.END) # auto-scroll to the end
-                case "prompt":
-                    self.prompt_text.insert(tk.END, message + '\n')
-                    self.prompt_text.yview(tk.END) # auto-scroll to the end
-                    threading.Thread(target=self.ret_resp).start()
+        if prompt_type == "prompt":
+            self.get_prompt_response()
 
-        self.after(100, self.check_for_prompts)
-
-    def ret_resp(self):
-        while self.resp_queue2.empty(): 
-            pass
-        if not self.resp_queue2.empty():
-            response = self.resp_queue2.get()
-            self.resp_queue.put((response))
-            self.prompt_text.delete('1.0', 'end')
+        if message == "Success!":
+            self.after(2000, self.prompt_text.delete, '1.0', 'end')
 
     def get_prompt_response(self):
+        # Get the response from the prompt entry field
         prompt_response = self.prompt_entry.get()
         if prompt_response:
+            # Clear the entry field after fetching the response
             self.prompt_entry.delete(0, tk.END)
-            self.resp_queue2.put((prompt_response))
+            # Place the response directly in the main response queue
+            self.resp_queue.put(prompt_response)
+
 
     def get_user_input(self):
         user_input = self.command_entry.get()
-        if user_input: 
+        if user_input:
             self.command_entry.delete(0, tk.END)
             command, filename = (user_input.split(" ", 2)[0], user_input.split(" ", 2)[1])
             request_thread = threading.Thread(target=self.launch_request, args=(command, filename))
             request_thread.daemon = True
             request_thread.start()
-
-if __name__ == "__main__": 
-    gui = clientGUI(server_ip)
-    gui.mainloop()

@@ -23,6 +23,7 @@ import subprocess
 script_dir = os.path.dirname(os.path.abspath(__file__))         # make script execution dynamic
 log_queue = queue.Queue()                                       # instantiate thread safe log queue
 prompt_queue = queue.Queue()
+resp_queue = queue.Queue()
 event_arr = [threading.Event() for _ in range(4)]
 
 try:
@@ -105,16 +106,14 @@ def process_usr_prompt(usr_prompt, conn):
     match usr_prompt[:MSG_PREFIX2_LEN]:
         case "INPUT":
             prompt_queue.put("INPUT", usr_prompt[MSG_PREFIX2_LEN:])
+            while resp_queue.empty():
+                pass
+            while not resp_queue.empty():
+                to_client = resp_queue.get()
+                conn.sendall(to_client.encode('utf-8'))
         case "PRINT":
             prompt_queue.put("PRINT", usr_prompt[MSG_PREFIX2_LEN:])
-
-    # match usr_prompt[:MSG_PREFIX2_LEN]:
-    #     case "INPUT":
-    #         to_client = input(usr_prompt)                 # if input, prompt user
-    #         conn.sendall(to_client.encode('utf-8'))             # send response back to client
-    #     case "PRINT":
-    #         print(usr_prompt)                              # if print, print to console
-
+            
 def app_handler(conn):
     while True: 
         status = conn.recv(1).decode('utf-8')
@@ -151,8 +150,6 @@ def server_loop(local_sock):
             break
 
 if __name__ == "__main__":
-    
-    mode_num = int(sys.argv[1])
 
     # set up localserver socket
     local_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -168,9 +165,9 @@ if __name__ == "__main__":
         "Domain Controller IP": domain_controller_ip,
         "Local Server IP": local_ip,
         "LDAP Server": ldap_server,
-        "Mode": mode_num
+        "Ports": "12343-12346"
     }
 
-    gui = localGUI(log_queue, prompt_queue, event_arr, gui_static_info_dict)
+    gui = localGUI(log_queue, prompt_queue, resp_queue, event_arr, gui_static_info_dict)
     gui.mainloop()
     local_sock.close() # reaches after gui quit 

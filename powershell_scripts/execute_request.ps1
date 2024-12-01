@@ -1,6 +1,7 @@
 param(
     [string]$target_client,
-    [string]$server_request
+    [string]$server_request,
+    [string]$mode
 )
 
 $clients = @(
@@ -8,6 +9,8 @@ $clients = @(
     @{Name="client2"; IP="192.168.1.202"; User="client2"; ScriptPath="client-code/client.py"}
     @{Name="client3"; IP="192.168.1.203"; User="client3"; ScriptPath="client-code/client.py"}
     @{Name="client4"; IP="192.168.1.204"; User="client4"; ScriptPath="client-code/client.py"}
+    @{Name="vinitg"; IP="192.168.1.205"; User="vinitg"; ScriptPath="client-code/client.py"}
+    @{Name="local"; IP="192.168.1.137"; User="yahav"; ScriptPath="$PSScriptRoot\..\socket_programming\client_code\client.py"}
 )
 
 $client = $clients | Where-Object { $_.Name -eq $target_client }
@@ -18,7 +21,7 @@ if ($client) {
     $jobs = @()
 
     # execute client command
-    $command = "python3 " + $client.ScriptPath + " " + $server_request
+    $command = "python3 " + $client.ScriptPath + " --" + $mode + " " + $server_request
     $sshCommand = "ssh $($client.User)@$($client.IP) $command"
     
     Write-Host "Executing on $($client.Name): $sshCommand"
