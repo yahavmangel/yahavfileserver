@@ -88,10 +88,9 @@ def send_prompt(message, prompt_type, mode, prompt_queue, resp_queue, logger):
         message: message to send
         type: print or input
     """
-
+    print(f"Sending prompt message: {message} with prompt type {prompt_type}.")
     match mode: 
         case 2: 
-            print(message)
             prompt_queue.put((message, prompt_type))
             if prompt_type == "prompt":
                 while resp_queue.empty():                   # wait for user resp
@@ -108,12 +107,13 @@ def send_prompt(message, prompt_type, mode, prompt_queue, resp_queue, logger):
                     case "prompt":
                         msg = 'USRINPUT' + message + 'END'
                         sock.sendall(msg.encode('utf-8'))
-
+                        print("aaa")
                         # wait for prompt response
                         return sock.recv(BUF_SIZE_SMALL).decode('utf-8')
                     case "print":
                         msg = 'USRPRINT' + message + 'END'
                         sock.sendall(msg.encode('utf-8'))
+                        print("bbb")
                         return 1
                 sock.close()
             except Exception:

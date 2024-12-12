@@ -17,14 +17,71 @@ import sys
 import queue
 from localgui import localGUI
 import subprocess
+import logging
 
 # logging and metadata
 
+class CustomFormatter(logging.Formatter):
+    """
+    Custom logging formatter that either includes/excludes 'conn_counter' attribute from the log.
+
+    The 'conn_counter' attribute is the connection ID, which can be used by admins to distinguish 
+    between each server connection in the aggregate log. When a logger does not know what ID their 
+    log is associated with, they pass "N/A" to this attribute. This formatter will then remove the 
+    attribute entirely.  
+    """
+
+    def format(self, record):
+
+        # Exclude conn_counter from the log if it's "N/A"
+        if getattr(record, 'conn_counter', 'N/A') == "N/A":
+            log_msg = f"({record.loggername}) {record.levelname}: {record.msg}"
+        else:
+            log_msg = (
+                f"({record.loggername}, ID: {record.conn_counter}) "
+                f"{record.levelname}: {record.msg}"
+            )
+        return log_msg
+
 script_dir = os.path.dirname(os.path.abspath(__file__))         # make script execution dynamic
 log_queue = queue.Queue()                                       # instantiate thread safe log queue
+log_queue2 = queue.Queue()
 prompt_queue = queue.Queue()
 resp_queue = queue.Queue()
 event_arr = [threading.Event() for _ in range(4)]
+
+logger = logging.getLogger("YFS")
+logger.setLevel(logging.DEBUG)
+
+if logger.hasHandlers():                                        # remove default handler
+    logger.handlers.clear()
+
+formatter = CustomFormatter()                                   # instantiate custom formatter
+file_handler = logging.FileHandler(os.path.join(script_dir, 'YFS.log'), mode='w')
+file_handler.setFormatter(formatter)                            # set formatter to the custom one
+logger.addHandler(file_handler)
+logger.propagate = False                                        # stop root log from existing
+
+def logger_thread():
+    """
+    Extra thread responsible for processing incoming logs in parallel with 
+    the local server polling for them. This makes for much faster log processing.
+    All incoming logs are placed in the log queue. This thread will then dequeue 
+    and write the oldest log. 
+    """
+    while True:
+        level, message, extra = log_queue2.get()
+        if level == "DEBUG":
+            logger.debug(message, extra=extra)
+        elif level == "INFO":
+            logger.info(message, extra=extra)
+        elif level == "WARNING":
+            logger.warning(message, extra=extra)
+        elif level == "ERROR":
+            logger.error(message, extra=extra)
+        elif level == "CRITICAL":
+            logger.critical(message, extra=extra)
+        log_queue2.task_done()
 
 try:
     config = configparser.ConfigParser()
@@ -50,6 +107,8 @@ MSG_PREFIX_LEN = 3
 MSG_PREFIX2_LEN = 5
 
 # main code
+
+threading.Thread(target=logger_thread, daemon=True).start()     # Start the logger thread
 
 def local_handler(conn):
     """
@@ -93,6 +152,8 @@ def process_log_entry(log_entry):
     message = log_entry.get('message')                          # place in log queue
     log_queue.put((loggerlevelname, message,
                    {'loggername': loggername, 'conn_counter': conn_counter}))
+    log_queue2.put((loggerlevelname, message,
+                   {'loggername': loggername, 'conn_counter': conn_counter}))
 
 def process_usr_prompt(usr_prompt, conn):
     """
@@ -105,14 +166,14 @@ def process_usr_prompt(usr_prompt, conn):
     """
     match usr_prompt[:MSG_PREFIX2_LEN]:
         case "INPUT":
-            prompt_queue.put("INPUT", usr_prompt[MSG_PREFIX2_LEN:])
+            prompt_queue.put(("INPUT", usr_prompt[MSG_PREFIX2_LEN:]))
             while resp_queue.empty():
                 pass
             while not resp_queue.empty():
                 to_client = resp_queue.get()
                 conn.sendall(to_client.encode('utf-8'))
         case "PRINT":
-            prompt_queue.put("PRINT", usr_prompt[MSG_PREFIX2_LEN:])
+            prompt_queue.put(("PRINT", usr_prompt[MSG_PREFIX2_LEN:]))
             
 def app_handler(conn):
     while True: 

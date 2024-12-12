@@ -26,12 +26,16 @@ from client_utils import *
 class YFSClient: 
 
     def __init__(self, mode, args): 
+
+        # logging setup 
         self.logger = logging.getLogger(LOGIN_NAME)
         self.logger.setLevel(getattr(logging, LOG_LEVEL))
-        self.json_handler = JSONSocketHandler(LOCAL_IP, PORT2)
+        self.json_handler = JSONSocketHandler(LOCAL_IP, PORT2)              # instantiate and attach custom handler
         self.json_handler.setLevel(getattr(logging, LOG_LEVEL))
         self.json_handler.setFormatter(logging.Formatter('(%(name)s) %(levelname)s: %(message)s'))
         self.logger.addHandler(self.json_handler)
+
+        # initialize metadata 
         self.command = args.command if args.command else None
         self.filename = args.filename if args.filename else None
         self.params = args.params if args.params else []
@@ -45,10 +49,8 @@ class YFSClient:
             case 2:
                 gui = clientGUI(SERVER_IP, self.launch_request, self.prompt_queue, self.resp_queue)
                 gui.mainloop()
-            case 1: 
-                self.server_request(self.command, self.filename, self.params)
-            case 0:
-                self.server_request(self.command, self.filename)
+            case _:
+                self.server_request()
 
     def server_request(self):
         """
@@ -149,7 +151,7 @@ class YFSClient:
             while True:                                             # prompt user on action
                 user_input = send_prompt("File already exists. Overwrite? [y/n] ", "prompt", self.mode, self.prompt_queue, self.resp_queue, self.logger)
                 if user_input in ['n', 'y']:
-                    send_prompt("Success!", "print")
+                    send_prompt("Success!", "print", self.mode, self.prompt_queue, self.resp_queue, self.logger)
                     break
                 send_prompt("Invalid input, try again\n", "print", self.mode, self.prompt_queue, self.resp_queue, self.logger)
             if user_input == 'n':

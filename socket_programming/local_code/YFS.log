@@ -1,1 +1,112 @@
-(localserver) INFO: localserver is listening...
+(fileserver, ID: 0) INFO: Server is listening...
+(DC) INFO: DC is listening...
+(vinitg) INFO: Connected to server: 192.168.1.224
+(fileserver, ID: 1) INFO: Connected by ('192.168.1.205', 54066)
+(fileserver, ID: 1) INFO: Client host connected: vinitg
+(fileserver, ID: 1) INFO: _______________NEW CONNECTION: vinitg; COMMAND: REQUEST hello; ID: 1______________
+(fileserver, ID: 1) DEBUG: Connecting to LDAP server: ldap://yahav.yahavfileserver.home
+(fileserver, ID: 1) DEBUG: Searching for client in LDAP server...
+(fileserver, ID: 1) INFO: Successfully connected to LDAP server: ldap://yahav.yahavfileserver.home
+(fileserver, ID: 1) INFO: Client recognized in LDAP server
+(fileserver, ID: 1) DEBUG: verifying permissions for client Vinit Gupta...
+(fileserver, ID: 1) DEBUG: Scanning for Vinit Gupta's group membership...
+(fileserver, ID: 1) DEBUG: Vinit Gupta is a member of the Administrators security group
+(fileserver, ID: 1) DEBUG: Initiating connection with DC for authorization...
+(DC) INFO: Connected by ('192.168.1.224', 39606)
+(DC, ID: 1) INFO: Administrators has permissions 0xf01bf. Has read access: True, has write access: True.
+(fileserver, ID: 1) DEBUG: Received message from DC: AUTHS
+(DC, ID: 1) INFO: Authentication concluded. Result: 1
+(fileserver, ID: 1) INFO: Client Vinit Gupta is authorized.
+(fileserver, ID: 1) DEBUG: server -> Vinit Gupta: AUTHSUCCESS
+(vinitg) DEBUG: Received authorization from server
+(fileserver, ID: 1) DEBUG: server -> Vinit Gupta: READY
+(vinitg) DEBUG: Received message from server: READY
+(vinitg) DEBUG: Waiting for server search results...
+(fileserver, ID: 1) DEBUG: Searching directory: /home/fileserver/server-code/../files. Search keyword is: hello
+(fileserver, ID: 1) INFO: Search for keyword hello successful, server returned 10 options.
+(fileserver, ID: 1) DEBUG: server -> Vinit Gupta: OPTIONS
+(vinitg) DEBUG: Received message from server: OPTIONS
+(vinitg) DEBUG: Results received.
+(vinitg) DEBUG: Waiting for client choice...
+(vinitg) DEBUG: Client chose option #8
+(vinitg) DEBUG: Checking if result is a file or directory...
+(fileserver, ID: 1) INFO: File sent successfully
+(vinitg) DEBUG: Is a file
+(vinitg) INFO: File received successfully
+(fileserver, ID: 2) INFO: Connected by ('192.168.1.205', 50778)
+(fileserver, ID: 2) INFO: Client host connected: vinitg.yahavfileserver.home
+(vinitg) INFO: Connected to server: 192.168.1.224
+(fileserver, ID: 2) INFO: _______________NEW CONNECTION: vinitg; COMMAND: STORE client-files/css; ID: 2______________
+(fileserver, ID: 2) DEBUG: Connecting to LDAP server: ldap://yahav.yahavfileserver.home
+(fileserver, ID: 2) INFO: Successfully connected to LDAP server: ldap://yahav.yahavfileserver.home
+(fileserver, ID: 2) DEBUG: Searching for client in LDAP server...
+(fileserver, ID: 2) INFO: Client recognized in LDAP server
+(fileserver, ID: 2) DEBUG: verifying permissions for client Vinit Gupta...
+(fileserver, ID: 2) DEBUG: Vinit Gupta is a member of the Administrators security group
+(fileserver, ID: 2) DEBUG: Scanning for Vinit Gupta's group membership...
+(fileserver, ID: 2) DEBUG: Initiating connection with DC for authorization...
+(DC) INFO: Connected by ('192.168.1.224', 33784)
+(DC, ID: 2) INFO: Administrators has permissions 0xf01bf. Has read access: True, has write access: True.
+(DC, ID: 2) INFO: Authentication concluded. Result: 1
+(fileserver, ID: 2) DEBUG: Received message from DC: AUTHS
+(fileserver, ID: 2) INFO: Client Vinit Gupta is authorized.
+(fileserver, ID: 2) DEBUG: server -> Vinit Gupta: AUTHSUCCESS
+(fileserver, ID: 2) WARNING: Overwrite detected. Notifying client...
+(vinitg) DEBUG: Received authorization from server
+(fileserver, ID: 2) DEBUG: server -> Vinit Gupta: OVERWRITE
+(vinitg) INFO: Connected to server: 192.168.1.224
+(fileserver, ID: 3) INFO: Connected by ('192.168.1.205', 50920)
+(fileserver, ID: 3) INFO: Client host connected: vinitg
+(fileserver, ID: 3) INFO: _______________NEW CONNECTION: vinitg; COMMAND: STORE client-files/css; ID: 3______________
+(fileserver, ID: 3) DEBUG: Connecting to LDAP server: ldap://yahav.yahavfileserver.home
+(fileserver, ID: 3) INFO: Successfully connected to LDAP server: ldap://yahav.yahavfileserver.home
+(fileserver, ID: 3) DEBUG: Searching for client in LDAP server...
+(fileserver, ID: 3) INFO: Client recognized in LDAP server
+(fileserver, ID: 3) DEBUG: verifying permissions for client Vinit Gupta...
+(fileserver, ID: 3) DEBUG: Scanning for Vinit Gupta's group membership...
+(fileserver, ID: 3) DEBUG: Vinit Gupta is a member of the Administrators security group
+(fileserver, ID: 3) DEBUG: Initiating connection with DC for authorization...
+(DC) INFO: Connected by ('192.168.1.224', 48372)
+(DC, ID: 3) INFO: Authentication concluded. Result: 1
+(DC, ID: 3) INFO: Administrators has permissions 0xf01bf. Has read access: True, has write access: True.
+(fileserver, ID: 3) DEBUG: Received message from DC: AUTHS
+(fileserver, ID: 3) INFO: Client Vinit Gupta is authorized.
+(fileserver, ID: 3) DEBUG: server -> Vinit Gupta: AUTHSUCCESS
+(vinitg) DEBUG: Received authorization from server
+(fileserver, ID: 3) WARNING: Overwrite detected. Notifying client...
+(fileserver, ID: 3) DEBUG: server -> Vinit Gupta: OVERWRITE
+(fileserver, ID: 4) INFO: Connected by ('192.168.1.205', 51774)
+(vinitg) INFO: Connected to server: 192.168.1.224
+(vinitg) CRITICAL: Connection timed out. Server unreachable.
+(fileserver) CRITICAL: DNS server offline. Quitting.
+(vinitg) INFO: Connected to server: 192.168.1.224
+(fileserver, ID: 5) INFO: Connected by ('192.168.1.205', 34762)
+(fileserver, ID: 5) INFO: Client host connected: vinitg
+(fileserver, ID: 5) INFO: _______________NEW CONNECTION: vinitg; COMMAND: STORE client-files/css; ID: 5______________
+(fileserver, ID: 5) DEBUG: Connecting to LDAP server: ldap://yahav.yahavfileserver.home
+(fileserver, ID: 5) INFO: Successfully connected to LDAP server: ldap://yahav.yahavfileserver.home
+(fileserver, ID: 5) DEBUG: Searching for client in LDAP server...
+(fileserver, ID: 5) INFO: Client recognized in LDAP server
+(fileserver, ID: 5) DEBUG: verifying permissions for client Vinit Gupta...
+(fileserver, ID: 5) DEBUG: Scanning for Vinit Gupta's group membership...
+(fileserver, ID: 5) DEBUG: Vinit Gupta is a member of the Administrators security group
+(fileserver, ID: 5) DEBUG: Initiating connection with DC for authorization...
+(DC) INFO: Connected by ('192.168.1.224', 36026)
+(DC, ID: 5) INFO: Administrators has permissions 0xf01bf. Has read access: True, has write access: True.
+(DC, ID: 5) INFO: Authentication concluded. Result: 1
+(fileserver, ID: 5) DEBUG: Received message from DC: AUTHS
+(fileserver, ID: 5) INFO: Client Vinit Gupta is authorized.
+(fileserver, ID: 5) DEBUG: server -> Vinit Gupta: AUTHSUCCESS
+(fileserver, ID: 5) WARNING: Overwrite detected. Notifying client...
+(vinitg) DEBUG: Received authorization from server
+(fileserver, ID: 5) DEBUG: server -> Vinit Gupta: OVERWRITE
+(vinitg) DEBUG: vinitg -> server: ACK
+(vinitg) INFO: Acknowledged overwrite
+(fileserver, ID: 5) INFO: Client acknowledged overwrite. Continuing.
+(fileserver, ID: 5) DEBUG: server -> Vinit Gupta: READY
+(vinitg) DEBUG: Received message from server: READY
+(vinitg) DEBUG: Checking if client-files/css is a file or a directory...
+(vinitg) DEBUG: Result: is a directory
+(vinitg) DEBUG: vinitg -> server: STOREDIRE
+(vinitg) INFO: The client-files/css directory was zipped and sent successfully
+(fileserver, ID: 5) DEBUG: Checking if STORE request is for a file or a directory...
