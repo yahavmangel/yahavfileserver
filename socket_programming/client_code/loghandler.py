@@ -19,7 +19,6 @@ class JSONSocketHandler(logging.Handler):
         self.port = port
 
     def emit(self, record):                     # multithreaded: create a thread for each log
-
         thread = threading.Thread(target=self.send_log, args=(record,))
         thread.start()
 
@@ -28,10 +27,9 @@ class JSONSocketHandler(logging.Handler):
         Constructs log into JSON dict, then sends it over socket.
         """
         try:
-
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.connect((self.host, self.port))
-
+            
             log_entry = {                       # Prepare the log entry
                 'name': record.name,
                 'level': record.levelname,

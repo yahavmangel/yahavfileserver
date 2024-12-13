@@ -1,0 +1,97 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    color:antiquewhite;
+    font-family:'Times New Roman', Times, serif;
+    background-image: url(../media/bkgtech.jpg);
+    background-repeat: no-repeat; 
+    -webkit-background-size: cover;
+    -moz-background-size: cover;
+    -o-background-size: cover;
+    background-size: cover;
+}
+
+h1 {
+    font-size: 5rem;
+    text-align: center;
+    /* color: rgb(0, 23, 128); */
+}
+
+h2 {
+    font-size: 3rem;
+}
+
+/* ........................left........................... */
+
+
+#left {
+    position: absolute;
+    left: 0px;
+    right: 0px;
+    width: 30%;
+    height: 61.7rem;
+    border-right: 8px solid #bcb8ee;
+}
+
+#stats{
+    position: absolute;
+    left: 9.375rem;
+    top: 3rem;
+    padding: 1rem;
+    text-align: center;
+    font-size: 3rem;
+    color: inherit;
+}
+
+#CPSline {
+    font-size: 2rem;
+}
+
+#mainButton {
+    position: absolute;
+    margin: auto 3rem;
+    left: 0px;
+    right: 0px;
+    top: 15.625rem;
+    border-radius: 4rem;
+    width:85%;
+    height: 20rem;
+}
+
+#ECEB {
+    border-radius: inherit;
+    height: inherit;
+    width: 100%;
+}
+
+/* ........................shop........................ */
+
+#shop {
+    position: absolute;
+    left: 90rem;
+    top: 5.7rem;
+    border-left: 8px solid #bcb8ee;
+    height: 61.7rem;
+    padding: 2rem;
+}
+
+#shop h2 {
+    margin: 3rem 12rem;
+}
+
+#shop h3 {
+    font-size: 3rem;
+}
+#shop p {
+    font-size: 2rem;
+}
+
+#item1 {
+    text-align: center;
+    border: 3px solid #333;
+    width: 88%;
+}

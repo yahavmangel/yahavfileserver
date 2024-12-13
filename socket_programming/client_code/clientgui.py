@@ -1,21 +1,14 @@
+"""
+The class implementation for the client GUI. 
+It is only launched when the client script is launched in user mode. 
+
+"""
+
 import tkinter as tk
-import subprocess
-import os
 import threading
-import configparser
-import socket 
 import queue 
 
-script_dir = os.path.dirname(os.path.abspath(__file__))
-
-try: 
-    config = configparser.ConfigParser()
-    config.read(os.path.join(script_dir, 'config.ini'))
-    server_ip = config['client']['server_ip']
-except: 
-    pass
-
-class clientGUI(tk.Tk):
+class ClientGUI(tk.Tk):
     def __init__(self, server_ip, launch_request, prompt_queue, resp_queue): 
         super().__init__()
         
@@ -32,6 +25,7 @@ class clientGUI(tk.Tk):
         # launch rest of GUI 
         self.launch_user_gui()
 
+        # start processing thread
         self.processing_thread = threading.Thread(target=self.process_prompts, daemon=True)
         self.processing_thread.start()
 
@@ -56,9 +50,12 @@ class clientGUI(tk.Tk):
         self.command_label.pack(side="top")
 
         self.command_entry = tk.Entry(self.command_frame, font=('Times New Roman', 24), width=50)
-        self.command_entry.pack(pady=(45, 0))
-        self.command_submit_button = tk.Button(self.command_frame, text="Submit", command=self.get_user_input, width=40, height=60)
-        self.command_submit_button.pack(pady=(50, 0))  
+        self.command_entry.pack(pady=(15, 0))
+        self.command_submit_button = tk.Button(self.command_frame, text="Submit", command=self.get_user_input, width=20)
+        self.command_submit_button.pack(pady=(20,0), side="top")  
+
+        self.error_label = tk.Label(self.command_frame, font=('Times New Roman', 18), fg="red", bg="lightgrey")
+        self.error_label.pack(pady=(5,0))
 
         self.prompt_frame = tk.Frame(self, height=400, bg="lightgrey", relief="ridge", bd=5)
         self.prompt_frame.grid(column=0, row=2, sticky="ew")
@@ -119,7 +116,17 @@ class clientGUI(tk.Tk):
         user_input = self.command_entry.get()
         if user_input:
             self.command_entry.delete(0, tk.END)
-            command, filename = (user_input.split(" ", 2)[0], user_input.split(" ", 2)[1])
-            request_thread = threading.Thread(target=self.launch_request, args=(command, filename))
-            request_thread.daemon = True
-            request_thread.start()
+            try: 
+                command, filename = (user_input.split(" ", 2)[0], user_input.split(" ", 2)[1])
+                if command not in ['STORE', 'REQUEST']:
+                    self.display_error("Error: Invalid Command")
+                    return
+                self.error_label.config(text="")        # valid request, so you can clear the error message!
+                request_thread = threading.Thread(target=self.launch_request, args=(command, filename))
+                request_thread.daemon = True
+                request_thread.start()
+            except IndexError:
+                self.display_error("Error: Invalid Input")
+
+    def display_error(self, error_msg):
+        self.error_label.config(text=error_msg)

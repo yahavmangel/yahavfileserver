@@ -1,7 +1,6 @@
 import sys
 import configparser
 import os
-import socket
 import argparse
 
 # constants
@@ -60,6 +59,7 @@ def wait_for_server_resp(client_socket, resp, logger):
     Args:
         client_socket: the socket holding the connection with the server.
         resp: desired response from server
+        logger: logger to log messages to
     """
     resp_len = len(resp)
     while True:
@@ -75,54 +75,14 @@ def send_client_msg(client_socket, msg, logger):
     Args:
         client_socket: the socket holding the connection with the server. 
         msg: desired message to server 
+        logger: logger to log messages to
     """
             
     logger.debug("%s -> server: %s", LOGIN_NAME, msg)
     client_socket.sendall(command_table[msg].encode())
 
-def send_prompt(message, prompt_type, mode, prompt_queue, resp_queue, logger):
-    """
-    Sends a prompt (either input() or print()) to local server)
-
-    Args:
-        message: message to send
-        type: print or input
-    """
-    print(f"Sending prompt message: {message} with prompt type {prompt_type}.")
-    match mode: 
-        case 2: 
-            prompt_queue.put((message, prompt_type))
-            if prompt_type == "prompt":
-                while resp_queue.empty():                   # wait for user resp
-                    pass
-                while not resp_queue.empty():
-                    return resp_queue.get()
-            
-        case _:
-            try:
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.connect((LOCAL_IP, PORT2))
-
-                match prompt_type:
-                    case "prompt":
-                        msg = 'USRINPUT' + message + 'END'
-                        sock.sendall(msg.encode('utf-8'))
-                        print("aaa")
-                        # wait for prompt response
-                        return sock.recv(BUF_SIZE_SMALL).decode('utf-8')
-                    case "print":
-                        msg = 'USRPRINT' + message + 'END'
-                        sock.sendall(msg.encode('utf-8'))
-                        print("bbb")
-                        return 1
-                sock.close()
-            except Exception:
-                logger.critical("localserver unreachable. Exiting.")
-                sys.exit(1)
-
 def parse_client_args():
 
-    mode = None
     # parser setup 
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group(required=True)
