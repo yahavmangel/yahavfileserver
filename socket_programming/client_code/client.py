@@ -1,18 +1,21 @@
 """
 The class implementation for a client for the YFS server. 
-Uses various utilities from the client_utils.py file. 
+Uses various utilities, config variables, and constants from the client_utils.py file. 
 
 Functions: 
-    server_request()
-    handle_overwrite(client_socket)
-    store_handler(client_socket)
-    request_handler(client_socket)
-    handle_file_response(selected_option, client_socket)
-    handle_dir_response(selected_option, client_socket)
-    send_file(client_socket)
-    send_dir(client_socket)
-    send_prompt(message, prompt_type)
-    launch_request(command, filename)
+    Main flow: 
+        start()
+        server_request()
+        store_handler(client_socket)
+        request_handler(client_socket)
+    Helper functions: 
+        handle_overwrite(client_socket)
+        receive_file(selected_option, client_socket)
+        receive_dir(selected_option, client_socket)
+        send_file(client_socket)
+        send_dir(client_socket)
+        send_prompt(message, prompt_type)
+        launch_request(command, filename)
 """
 
 import socket
@@ -28,12 +31,15 @@ from clientgui import ClientGUI
 from client_utils import *
 
 class YFSClient: 
+    """
+    The class implementation for a client for the YFS server. 
+    """
     def __init__(self, mode, args): 
 
         # logging setup 
         self.logger = logging.getLogger(LOGIN_NAME)
         self.logger.setLevel(getattr(logging, LOG_LEVEL))
-        self.json_handler = JSONSocketHandler(LOCAL_IP, PORT2)              # instantiate and attach custom handler
+        self.json_handler = JSONSocketHandler(LOCAL_IP, PORT2)      # instantiate and attach custom handler
         self.json_handler.setLevel(getattr(logging, LOG_LEVEL))
         self.json_handler.setFormatter(logging.Formatter('(%(name)s) %(levelname)s: %(message)s'))
         self.logger.addHandler(self.json_handler)
@@ -42,17 +48,20 @@ class YFSClient:
         self.command = args.command if args.command else None
         self.filename = args.filename if args.filename else None
         self.params = args.params if args.params else []
-        self.prompt_queue = queue.Queue()                                   # make queue for user prompts
-        self.resp_queue = queue.Queue()                                     # make queue for user responses
-        self.cur_params_idx = 0                                             # index of pre-passed params currently expecting
+        self.prompt_queue = queue.Queue()                           # make queue for user prompts
+        self.resp_queue = queue.Queue()                             # make queue for user responses
+        self.cur_params_idx = 0                                     # index of pre-passed params currently expecting
         self.mode = mode
 
     def start(self):
+        """
+        Launches either GUI or request based on mode.
+        """
         match self.mode: 
-            case 2:                                                         # user mode only: launch user GUI
+            case 2:                                                 # user mode only: launch user GUI
                 gui = ClientGUI(SERVER_IP, self.launch_request, self.prompt_queue, self.resp_queue)
                 gui.mainloop()
-            case _:                                                         # all other modes: just launch a request
+            case _:                                                 # all other modes: just launch a request
                 self.server_request()
 
     def server_request(self):
@@ -60,7 +69,7 @@ class YFSClient:
         Launches a server request. All necessary metadata for the request is initialized in the constructor. 
         """
 
-        client_socket = None                                                # to avoid error
+        client_socket = None                                        # to avoid error
         try:
             # input validation
             if self.command not in ['STORE', 'REQUEST']:
@@ -78,33 +87,33 @@ class YFSClient:
 
                 # send client username, command, and file name to server for processing
                 server_msg = f"{os.getlogin()}|{self.command}|{self.filename}"
-                client_socket.sendall(server_msg.encode())                  # send server message
+                client_socket.sendall(server_msg.encode())          # send server message
 
                 # handle client command
                 if self.command == 'STORE':
-                    while True:                                             # wait for server auth response
+                    while True:                                     # wait for server auth response
                         server_resp = client_socket.recv(AUTH_RESP_LEN).decode('utf-8')
                         if server_resp[:-1] == 'AUTH':
                             break
-                    if server_resp == 'AUTHS':                              # auth success: handle request
+                    if server_resp == 'AUTHS':                      # auth success: handle request
                         self.logger.debug("Received authorization from server")
                         status = self.handle_overwrite(client_socket)
                         if not status:
-                            return                                          # overwrite check passed
+                            return                                  # overwrite check passed
                         self.store_handler(client_socket)
-                    elif server_resp == 'AUTHF':                            # auth fail: reject request
+                    elif server_resp == 'AUTHF':                    # auth fail: reject request
                         self.logger.error("Permission denied. Exiting.")
                         return
 
                 elif self.command == 'REQUEST':
-                    while True:                                             # wait for server auth response
+                    while True:                                     # wait for server auth response
                         server_resp = client_socket.recv(AUTH_RESP_LEN).decode('utf-8')
                         if 'AUTH' in server_resp:
                             break
-                    if server_resp == 'AUTHS':                              # auth success: handle request
+                    if server_resp == 'AUTHS':                      # auth success: handle request
                         self.logger.debug("Received authorization from server")
                         self.request_handler(client_socket)
-                    elif server_resp == 'AUTHF':                            # auth fail: rejct request
+                    elif server_resp == 'AUTHF':                    # auth fail: rejct request
                         self.logger.error("Permission denied. Exiting.")
                         return
 
@@ -119,6 +128,78 @@ class YFSClient:
         finally:
             if client_socket: 
                 client_socket.close()
+
+    def store_handler(self, client_socket):
+        """
+        Handles main workflow of STORE command: sends file/directory to server.
+
+        Args:
+            client_socket: the socket holding the connection with the server.
+        """
+
+        self.logger.debug("Checking if %s is a file or a directory...", self.filename)
+        if os.path.isfile(self.filename):
+            self.logger.debug("Result: is a file")
+            if not self.send_file(client_socket):
+                return
+        elif os.path.isdir(self.filename):
+            self.logger.debug("Result: is a directory")
+            if not self.send_dir(client_socket):
+                return
+        else:                                                       # case of invalid file name
+            self.logger.error("The file or directory you requested to store does not exist. Exiting.")
+
+    def request_handler(self, client_socket):
+        """
+        Handles main workflow of REQUEST command: 
+        1. wait for server options 
+        2. prompt user to choose b/w options
+        3. send user choice to server 
+        4. receive requested choice from server 
+
+        Args:
+            client_socket: the socket holding the connection with the server. 
+        """
+
+        # check that server is ready
+        wait_for_server_resp(client_socket, "READY", self.logger)               
+        try:
+            # wait for server to return options
+            self.logger.debug("Waiting for server search results...")
+            wait_for_server_resp(client_socket, "OPTIONS", self.logger)
+            self.logger.debug("Results received.")
+
+            # receive and decode options 
+            json_list = client_socket.recv(BUF_SIZE_LARGE).decode('utf-8')      
+            options = json.loads(json_list)
+
+            # check if any results were found
+            if len(options) > 0:
+                user_input = self.prompt_for_choice(options)        # prompt user to choose b/w options
+                client_socket.sendall(user_input.encode())          # send user choice back to server
+
+                if int(user_input) > len(options) or int(user_input) == 10:
+                    self.logger.debug("Client chose N/A option")    # user chose N/A
+                    self.send_prompt("Sorry we couldn't find your file :(", "print")
+                else:                                               # user chose an actual choice 
+                    # handle file request response
+                    self.logger.debug("Checking if result is a file or directory...")
+                    selected_option = options[int(user_input) - 1]
+
+                    # use '/' character appended by server to distinguish between files and dirs.
+                    # If there is a '/', it is a dir. If there isn't, it's a file. 
+                    if not selected_option.endswith('/') == '/':
+                        self.logger.debug("Is a file")
+                        self.receive_file(selected_option, client_socket)
+                    else:
+                        self.logger.debug("Is a directory")
+                        self.receive_dir(selected_option, client_socket)
+            else:
+                self.logger.error("File not found in server. Exiting.")
+        except json.decoder.JSONDecodeError:
+            self.logger.error("No matching results in server. Exiting.")
+
+    ############ helper functions ############
 
     def handle_overwrite(self, client_socket):
         """
@@ -156,78 +237,6 @@ class YFSClient:
                 wait_for_server_resp(client_socket, "READY", self.logger)
         return True
 
-    def store_handler(self, client_socket):
-        """
-        Handles main workflow of STORE command: sends file/directory to server.
-
-        Args:
-            client_socket: the socket holding the connection with the server.
-        """
-
-        self.logger.debug("Checking if %s is a file or a directory...", self.filename)
-        if os.path.isfile(self.filename):
-            self.logger.debug("Result: is a file")
-            if not self.send_file(client_socket):
-                return
-        elif os.path.isdir(self.filename):
-            self.logger.debug("Result: is a directory")
-            if not self.send_dir(client_socket):
-                return
-        else:                                                           # case of invalid file name
-            self.logger.error("The file or directory you requested to store does not exist. Exiting.")
-
-    def request_handler(self, client_socket):
-        """
-        Handles main workflow of REQUEST command: 
-        1. wait for server options 
-        2. prompt user to choose b/w options
-        3. send user choice to server 
-        4. receive requested choice from server 
-
-        Args:
-            client_socket: the socket holding the connection with the server. 
-        """
-
-        # check that server is ready
-        wait_for_server_resp(client_socket, "READY", self.logger)               
-        try:
-            # wait for server to return options
-            self.logger.debug("Waiting for server search results...")
-            wait_for_server_resp(client_socket, "OPTIONS", self.logger)
-            self.logger.debug("Results received.")
-
-            # receive and decode options 
-            json_list = client_socket.recv(BUF_SIZE_LARGE).decode('utf-8')      
-            options = json.loads(json_list)
-
-            # check if any results were found
-            if len(options) > 0:
-                user_input = self.prompt_for_choice(options)                    # prompt user to choose b/w options
-                client_socket.sendall(user_input.encode())                      # send user choice back to server
-
-                if int(user_input) > len(options) or int(user_input) == 10:     # user chose N/A option
-                    self.logger.debug("Client chose N/A option")
-                    self.send_prompt("Sorry we couldn't find your file :(", "print")
-                else:                                                           # user submitted an actual choice 
-                    # handle file request response
-                    self.logger.debug("Checking if result is a file or directory...")
-                    selected_option = options[int(user_input) - 1]
-
-                    # use '/' character appended by server to distinguish between files and dirs.
-                    # If there is a '/', it is a dir. If there isn't, it's a file. 
-                    if not selected_option.endswith('/') == '/':
-                        self.logger.debug("Is a file")
-                        self.handle_file_response(selected_option, client_socket)
-                    else:
-                        self.logger.debug("Is a directory")
-                        self.handle_dir_response(selected_option, client_socket)
-            else:
-                self.logger.error("File not found in server. Exiting.")
-        except json.decoder.JSONDecodeError:
-            self.logger.error("No matching results in server. Exiting.")
-
-    ############ helper functions ############
-
     def prompt_for_choice(self, options):
         """
         Helper function that prompts the user to choose between the received options from a REQUEST command.
@@ -257,7 +266,7 @@ class YFSClient:
             except ValueError:                                                  # case of non-int input
                 self.send_prompt("Please choose one of the numbers above.", "print")
 
-    def handle_file_response(self, selected_option, client_socket):
+    def receive_file(self, selected_option, client_socket):
         """
         Helper function to handle receiving a file during a REQUEST command.
         This function also implements a "copy" mechanism to prevent overwrite.
@@ -289,7 +298,7 @@ class YFSClient:
         except IOError as e:
             self.logger.error("Error reading file %s: %s", new_filepath, e)
     
-    def handle_dir_response(self, selected_option, client_socket):
+    def receive_dir(self, selected_option, client_socket):
         """
         Helper function to handle receiving a directory during a REQUEST command. 
         This function also implements a "copy" mechanism to prevent overwrite.
@@ -360,11 +369,11 @@ class YFSClient:
         send_client_msg(client_socket, "STOREDIRE", self.logger)
         with zipfile.ZipFile(self.filename + '.zip', 'w') as temp_zip:
             for root, dirs, files in os.walk(self.filename):
-                for file in files:                                              # add every file to zip archive
+                for file in files:                                  # add every file to zip archive
                     filepath = os.path.join(root, file)
                     arcname = os.path.relpath(filepath, start=os.path.join(os.path.join(TARGET_DIR, self.filename)))
                     temp_zip.write(filepath, arcname=arcname)
-                for dire in dirs:                                               # add every dir to zip archive
+                for dire in dirs:                                   # add every dir to zip archive
                     dirpath = os.path.join(root, dire)
                     arcname = os.path.relpath(dirpath, start=os.path.join(os.path.join(TARGET_DIR, self.filename)))
                     temp_zip.write(dirpath, arcname=arcname)
@@ -387,7 +396,7 @@ class YFSClient:
             message: message to send
             prompt_type: print or input
         """
-        match mode: 
+        match self.mode: 
             case 2:                                                 # user mode 
                 self.prompt_queue.put((message, prompt_type))
                 if prompt_type == "prompt":

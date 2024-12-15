@@ -1,3 +1,7 @@
+"""
+This file contains various constants, magic numbers, and utilities used by the client script.
+"""
+
 import sys
 import configparser
 import os
@@ -82,15 +86,24 @@ def send_client_msg(client_socket, msg, logger):
     client_socket.sendall(command_table[msg].encode())
 
 def parse_client_args():
+    """
+    Parses the CLI call of the client script into the 3 distinct modes.
+    Uses argparse library. 
+    """
+
+    mode = None
 
     # parser setup 
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group(required=True)
 
     # define the mode flags
-    group.add_argument('-u', '--user', action='store_const', const = 'user', help='Run in user mode: launches user GUI and executes client requests on the fly.')
-    group.add_argument('-d', '--dev', action='store_const', const = 'dev', help='Run in dev mode: instantly executes a single client request, and waits for prompt responses from the developer.')
-    group.add_argument('-t', '--test', action='store_const', const = 'test', help='Run in test mode: instantly executes a single client with preloaded responses to prompts.')
+    group.add_argument('-u', '--user', action='store_const', const = 'user',
+                        help='Run in user mode: launches user GUI and executes client requests on the fly.')
+    group.add_argument('-d', '--dev', action='store_const', const = 'dev',
+                        help='Run in dev mode: instantly executes a single client request, and waits for prompt responses from the developer.')
+    group.add_argument('-t', '--test', action='store_const', const = 'test',
+                        help='Run in test mode: instantly executes a single client with preloaded responses to prompts.')
     
     # define positional arguments
     parser.add_argument('command', nargs='?', help="Command to execute (dev/test modes).")

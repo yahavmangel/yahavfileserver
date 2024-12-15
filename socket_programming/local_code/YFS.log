@@ -1,37 +1,23 @@
 (fileserver, ID: 0) INFO: Server is listening...
-(DC) INFO: DC is listening...
-(fileserver, ID: 1) INFO: Connected by ('192.168.1.205', 51212)
-(vinitg) INFO: Connected to server: 192.168.1.224
-(fileserver, ID: 1) INFO: Client host connected: vinitg
-(fileserver, ID: 1) INFO: _______________NEW CONNECTION: vinitg; COMMAND: REQUEST h; ID: 1______________
+(yahav) INFO: Connected to server: 192.168.1.224
+(fileserver, ID: 1) INFO: Client host connected: local
+(fileserver, ID: 1) INFO: Connected by ('192.168.1.137', 61022)
 (fileserver, ID: 1) DEBUG: Connecting to LDAP server: ldap://yahav.yahavfileserver.home
+(fileserver, ID: 1) INFO: _______________NEW CONNECTION: yahav; COMMAND: REQUEST css; ID: 1______________
 (fileserver, ID: 1) INFO: Successfully connected to LDAP server: ldap://yahav.yahavfileserver.home
 (fileserver, ID: 1) DEBUG: Searching for client in LDAP server...
 (fileserver, ID: 1) INFO: Client recognized in LDAP server
-(fileserver, ID: 1) DEBUG: verifying permissions for client Vinit Gupta...
-(fileserver, ID: 1) DEBUG: Vinit Gupta is a member of the Administrators security group
-(fileserver, ID: 1) DEBUG: Scanning for Vinit Gupta's group membership...
+(fileserver, ID: 1) DEBUG: verifying permissions for client YAHAV...
+(fileserver, ID: 1) DEBUG: Scanning for YAHAV's group membership...
+(fileserver, ID: 1) DEBUG: YAHAV is a member of the Administrators security group
 (fileserver, ID: 1) DEBUG: Initiating connection with DC for authorization...
-(DC) INFO: Connected by ('192.168.1.224', 37516)
-(DC, ID: 1) INFO: Administrators has permissions 0xf01bf. Has read access: True, has write access: True.
-(DC, ID: 1) INFO: Authentication concluded. Result: 1
-(fileserver, ID: 1) DEBUG: Received message from DC: AUTHS
-(fileserver, ID: 1) INFO: Client Vinit Gupta is authorized.
-(fileserver, ID: 1) DEBUG: server -> Vinit Gupta: AUTHSUCCESS
-(fileserver, ID: 1) DEBUG: server -> Vinit Gupta: READY
-(fileserver, ID: 1) DEBUG: Searching directory: /home/fileserver/server-code/../files. Search keyword is: h
-(vinitg) DEBUG: Received message from server: READY
-(vinitg) DEBUG: Received authorization from server
-(vinitg) DEBUG: Waiting for server search results...
-(fileserver, ID: 1) INFO: Search for keyword h successful, server returned 0 options.
-(fileserver, ID: 1) DEBUG: server -> Vinit Gupta: OPTIONS
-(fileserver, ID: 1) ERROR: Search unsuccessful. Closing.
-(vinitg) DEBUG: Received message from server: OPTIONS
-(vinitg) DEBUG: Results received.
-(vinitg) ERROR: No matching results in server. Exiting.
-(fileserver, ID: 2) INFO: Connected by ('192.168.1.137', 55898)
+(fileserver, ID: 1) CRITICAL: Failed to connect to DC
+(fileserver, ID: 1) ERROR: Client not authorized to make request. Exiting.
+(fileserver, ID: 1) DEBUG: server -> YAHAV: AUTHFAIL
+(yahav) ERROR: Permission denied. Exiting.
 (yahav) INFO: Connected to server: 192.168.1.224
-(fileserver, ID: 2) INFO: Client host connected: local
+(fileserver, ID: 2) INFO: Connected by ('192.168.1.137', 61030)
+(fileserver, ID: 2) INFO: Client host connected: local.yahavfileserver.home
 (fileserver, ID: 2) INFO: _______________NEW CONNECTION: yahav; COMMAND: REQUEST css; ID: 2______________
 (fileserver, ID: 2) DEBUG: Connecting to LDAP server: ldap://yahav.yahavfileserver.home
 (fileserver, ID: 2) INFO: Successfully connected to LDAP server: ldap://yahav.yahavfileserver.home
@@ -41,32 +27,16 @@
 (fileserver, ID: 2) DEBUG: Scanning for YAHAV's group membership...
 (fileserver, ID: 2) DEBUG: YAHAV is a member of the Administrators security group
 (fileserver, ID: 2) DEBUG: Initiating connection with DC for authorization...
-(DC) INFO: Connected by ('192.168.1.224', 49284)
-(DC, ID: 2) INFO: Administrators has permissions 0xf01bf. Has read access: True, has write access: True.
-(fileserver, ID: 2) DEBUG: Received message from DC: AUTHS
-(DC, ID: 2) INFO: Authentication concluded. Result: 1
-(fileserver, ID: 2) INFO: Client YAHAV is authorized.
-(fileserver, ID: 2) DEBUG: server -> YAHAV: AUTHSUCCESS
-(yahav) DEBUG: Received authorization from server
-(fileserver, ID: 2) DEBUG: server -> YAHAV: READY
-(fileserver, ID: 2) DEBUG: Searching directory: /home/fileserver/server-code/../files. Search keyword is: css
-(yahav) DEBUG: Received message from server: READY
-(yahav) DEBUG: Waiting for server search results...
-(fileserver, ID: 2) INFO: Search for keyword css successful, server returned 10 options.
-(fileserver, ID: 2) DEBUG: server -> YAHAV: OPTIONS
-(yahav) DEBUG: Received message from server: OPTIONS
-(yahav) DEBUG: Results received.
-(yahav) DEBUG: Waiting for client choice...
-(yahav) DEBUG: Client chose option #9
-(yahav) DEBUG: Checking if result is a file or directory...
-(yahav) DEBUG: Is a directory
-(fileserver, ID: 2) INFO: Zipped directory sent successfully
-(yahav) INFO: Directory unzipped successfully
-(fileserver, ID: 3) INFO: Connected by ('192.168.1.137', 55910)
-(fileserver, ID: 3) INFO: Client host connected: local.yahavfileserver.home
+(fileserver, ID: 2) CRITICAL: Failed to connect to DC
+(fileserver, ID: 2) ERROR: Client not authorized to make request. Exiting.
+(yahav) ERROR: Permission denied. Exiting.
+(fileserver, ID: 2) DEBUG: server -> YAHAV: AUTHFAIL
+(DC) INFO: DC is listening...
+(fileserver, ID: 3) INFO: Connected by ('192.168.1.137', 61050)
 (yahav) INFO: Connected to server: 192.168.1.224
+(fileserver, ID: 3) INFO: Client host connected: local
+(fileserver, ID: 3) INFO: _______________NEW CONNECTION: yahav; COMMAND: REQUEST css; ID: 3______________
 (fileserver, ID: 3) DEBUG: Connecting to LDAP server: ldap://yahav.yahavfileserver.home
-(fileserver, ID: 3) INFO: _______________NEW CONNECTION: yahav; COMMAND: STORE sus; ID: 3______________
 (fileserver, ID: 3) INFO: Successfully connected to LDAP server: ldap://yahav.yahavfileserver.home
 (fileserver, ID: 3) DEBUG: Searching for client in LDAP server...
 (fileserver, ID: 3) INFO: Client recognized in LDAP server
@@ -74,21 +44,31 @@
 (fileserver, ID: 3) DEBUG: Scanning for YAHAV's group membership...
 (fileserver, ID: 3) DEBUG: YAHAV is a member of the Administrators security group
 (fileserver, ID: 3) DEBUG: Initiating connection with DC for authorization...
-(DC) INFO: Connected by ('192.168.1.224', 36894)
+(DC) INFO: Connected by ('192.168.1.224', 57172)
 (DC, ID: 3) INFO: Administrators has permissions 0xf01bf. Has read access: True, has write access: True.
 (fileserver, ID: 3) DEBUG: Received message from DC: AUTHS
+(fileserver, ID: 3) INFO: Client YAHAV is authorized.
 (DC, ID: 3) INFO: Authentication concluded. Result: 1
 (fileserver, ID: 3) DEBUG: server -> YAHAV: AUTHSUCCESS
-(fileserver, ID: 3) INFO: Client YAHAV is authorized.
 (yahav) DEBUG: Received authorization from server
-(yahav) DEBUG: Checking if sus is a file or a directory...
-(fileserver, ID: 3) DEBUG: Checking if STORE request is for a file or a directory...
 (fileserver, ID: 3) DEBUG: server -> YAHAV: READY
-(yahav) ERROR: The file or directory you requested to store does not exist. Exiting.
-(fileserver, ID: 4) INFO: Connected by ('192.168.1.137', 56803)
+(yahav) DEBUG: Received message from server: READY
+(yahav) DEBUG: Waiting for server search results...
+(fileserver, ID: 3) DEBUG: Searching directory: /home/fileserver/server-code/../files. Search keyword is: css
+(fileserver, ID: 3) INFO: Search for keyword css successful, server returned 10 options.
+(fileserver, ID: 3) DEBUG: server -> YAHAV: OPTIONS
+(yahav) DEBUG: Received message from server: OPTIONS
+(yahav) DEBUG: Results received.
+(yahav) DEBUG: Waiting for client choice...
+(yahav) DEBUG: Client chose option #9
+(yahav) DEBUG: Checking if result is a file or directory...
+(yahav) DEBUG: Is a file
+(fileserver, ID: 3) INFO: Zipped directory sent successfully
+(yahav) INFO: File received successfully
 (yahav) INFO: Connected to server: 192.168.1.224
-(fileserver, ID: 4) INFO: Client host connected: local
-(fileserver, ID: 4) INFO: _______________NEW CONNECTION: yahav; COMMAND: REQUEST css; ID: 4______________
+(fileserver, ID: 4) INFO: Connected by ('192.168.1.137', 61063)
+(fileserver, ID: 4) INFO: Client host connected: local.yahavfileserver.home
+(fileserver, ID: 4) INFO: _______________NEW CONNECTION: yahav; COMMAND: REQUEST hello; ID: 4______________
 (fileserver, ID: 4) DEBUG: Connecting to LDAP server: ldap://yahav.yahavfileserver.home
 (fileserver, ID: 4) INFO: Successfully connected to LDAP server: ldap://yahav.yahavfileserver.home
 (fileserver, ID: 4) DEBUG: Searching for client in LDAP server...
@@ -97,262 +77,55 @@
 (fileserver, ID: 4) DEBUG: Scanning for YAHAV's group membership...
 (fileserver, ID: 4) DEBUG: YAHAV is a member of the Administrators security group
 (fileserver, ID: 4) DEBUG: Initiating connection with DC for authorization...
-(DC) INFO: Connected by ('192.168.1.224', 50150)
+(DC) INFO: Connected by ('192.168.1.224', 60668)
 (DC, ID: 4) INFO: Administrators has permissions 0xf01bf. Has read access: True, has write access: True.
 (DC, ID: 4) INFO: Authentication concluded. Result: 1
 (fileserver, ID: 4) DEBUG: Received message from DC: AUTHS
 (fileserver, ID: 4) INFO: Client YAHAV is authorized.
 (fileserver, ID: 4) DEBUG: server -> YAHAV: AUTHSUCCESS
-(fileserver, ID: 4) DEBUG: server -> YAHAV: READY
 (yahav) DEBUG: Received authorization from server
-(fileserver, ID: 4) DEBUG: Searching directory: /home/fileserver/server-code/../files. Search keyword is: css
+(fileserver, ID: 4) DEBUG: server -> YAHAV: READY
+(fileserver, ID: 4) DEBUG: Searching directory: /home/fileserver/server-code/../files. Search keyword is: hello
 (yahav) DEBUG: Received message from server: READY
 (yahav) DEBUG: Waiting for server search results...
-(fileserver, ID: 4) INFO: Search for keyword css successful, server returned 10 options.
+(fileserver, ID: 4) INFO: Search for keyword hello successful, server returned 10 options.
 (fileserver, ID: 4) DEBUG: server -> YAHAV: OPTIONS
 (yahav) DEBUG: Received message from server: OPTIONS
 (yahav) DEBUG: Results received.
 (yahav) DEBUG: Waiting for client choice...
-(yahav) DEBUG: Client chose N/A option
 (yahav) DEBUG: Client chose option #10
-(fileserver, ID: 4) INFO: Zipped directory sent successfully
-(fileserver, ID: 5) INFO: Connected by ('192.168.1.137', 56828)
-(fileserver, ID: 5) INFO: Client host connected: local.yahavfileserver.home
+(yahav) DEBUG: Client chose N/A option
+(fileserver, ID: 4) INFO: File sent successfully
+(fileserver, ID: 5) INFO: Connected by ('192.168.1.137', 61145)
 (yahav) INFO: Connected to server: 192.168.1.224
-(fileserver, ID: 5) INFO: _______________NEW CONNECTION: yahav; COMMAND: REQUEST css; ID: 5______________
+(fileserver, ID: 5) INFO: Client host connected: local
+(fileserver, ID: 5) INFO: _______________NEW CONNECTION: yahav; COMMAND: REQUEST hello; ID: 5______________
 (fileserver, ID: 5) DEBUG: Connecting to LDAP server: ldap://yahav.yahavfileserver.home
 (fileserver, ID: 5) INFO: Successfully connected to LDAP server: ldap://yahav.yahavfileserver.home
-(fileserver, ID: 5) DEBUG: Searching for client in LDAP server...
 (fileserver, ID: 5) INFO: Client recognized in LDAP server
 (fileserver, ID: 5) DEBUG: verifying permissions for client YAHAV...
+(fileserver, ID: 5) DEBUG: Searching for client in LDAP server...
 (fileserver, ID: 5) DEBUG: Scanning for YAHAV's group membership...
 (fileserver, ID: 5) DEBUG: YAHAV is a member of the Administrators security group
 (fileserver, ID: 5) DEBUG: Initiating connection with DC for authorization...
-(DC) INFO: Connected by ('192.168.1.224', 38368)
+(DC) INFO: Connected by ('192.168.1.224', 47782)
 (DC, ID: 5) INFO: Administrators has permissions 0xf01bf. Has read access: True, has write access: True.
 (DC, ID: 5) INFO: Authentication concluded. Result: 1
 (fileserver, ID: 5) DEBUG: Received message from DC: AUTHS
 (fileserver, ID: 5) INFO: Client YAHAV is authorized.
 (fileserver, ID: 5) DEBUG: server -> YAHAV: AUTHSUCCESS
+(yahav) DEBUG: Received authorization from server
 (fileserver, ID: 5) DEBUG: server -> YAHAV: READY
-(fileserver, ID: 5) DEBUG: Searching directory: /home/fileserver/server-code/../files. Search keyword is: css
-(yahav) DEBUG: Received authorization from server
-(fileserver, ID: 5) INFO: Search for keyword css successful, server returned 10 options.
+(fileserver, ID: 5) DEBUG: Searching directory: /home/fileserver/server-code/../files. Search keyword is: hello
+(yahav) DEBUG: Received message from server: READY
+(yahav) DEBUG: Waiting for server search results...
+(fileserver, ID: 5) INFO: Search for keyword hello successful, server returned 10 options.
 (fileserver, ID: 5) DEBUG: server -> YAHAV: OPTIONS
-(yahav) DEBUG: Received message from server: READY
-(yahav) DEBUG: Waiting for server search results...
-(yahav) DEBUG: Received message from server: OPTIONS
-(yahav) DEBUG: Results received.
-(yahav) DEBUG: Waiting for client choice...
-(yahav) DEBUG: Client chose option #10
-(yahav) DEBUG: Client chose N/A option
-(fileserver, ID: 5) INFO: Zipped directory sent successfully
-(fileserver, ID: 6) INFO: Connected by ('192.168.1.137', 56966)
-(fileserver, ID: 6) INFO: Client host connected: local
-(yahav) INFO: Connected to server: 192.168.1.224
-(fileserver, ID: 6) INFO: _______________NEW CONNECTION: yahav; COMMAND: REQUEST A; ID: 6______________
-(fileserver, ID: 6) DEBUG: Connecting to LDAP server: ldap://yahav.yahavfileserver.home
-(fileserver, ID: 6) INFO: Successfully connected to LDAP server: ldap://yahav.yahavfileserver.home
-(fileserver, ID: 6) DEBUG: Searching for client in LDAP server...
-(fileserver, ID: 6) INFO: Client recognized in LDAP server
-(fileserver, ID: 6) DEBUG: verifying permissions for client YAHAV...
-(fileserver, ID: 6) DEBUG: Scanning for YAHAV's group membership...
-(fileserver, ID: 6) DEBUG: YAHAV is a member of the Administrators security group
-(fileserver, ID: 6) DEBUG: Initiating connection with DC for authorization...
-(DC) INFO: Connected by ('192.168.1.224', 46704)
-(DC, ID: 6) INFO: Administrators has permissions 0xf01bf. Has read access: True, has write access: True.
-(DC, ID: 6) INFO: Authentication concluded. Result: 1
-(fileserver, ID: 6) DEBUG: Received message from DC: AUTHS
-(fileserver, ID: 6) INFO: Client YAHAV is authorized.
-(fileserver, ID: 6) DEBUG: server -> YAHAV: AUTHSUCCESS
-(fileserver, ID: 6) DEBUG: server -> YAHAV: READY
-(yahav) DEBUG: Received authorization from server
-(fileserver, ID: 6) DEBUG: Searching directory: /home/fileserver/server-code/../files. Search keyword is: A
-(yahav) DEBUG: Received message from server: READY
-(yahav) DEBUG: Waiting for server search results...
-(fileserver, ID: 6) INFO: Search for keyword A successful, server returned 0 options.
-(fileserver, ID: 6) DEBUG: server -> YAHAV: OPTIONS
-(fileserver, ID: 6) ERROR: Search unsuccessful. Closing.
-(yahav) DEBUG: Results received.
-(yahav) DEBUG: Received message from server: OPTIONS
-(yahav) ERROR: No matching results in server. Exiting.
-(yahav) INFO: Connected to server: 192.168.1.224
-(fileserver, ID: 7) INFO: Connected by ('192.168.1.137', 56974)
-(fileserver, ID: 7) INFO: Client host connected: local.yahavfileserver.home
-(fileserver, ID: 7) INFO: _______________NEW CONNECTION: yahav; COMMAND: REQUEST css; ID: 7______________
-(fileserver, ID: 7) DEBUG: Connecting to LDAP server: ldap://yahav.yahavfileserver.home
-(fileserver, ID: 7) INFO: Successfully connected to LDAP server: ldap://yahav.yahavfileserver.home
-(fileserver, ID: 7) DEBUG: Searching for client in LDAP server...
-(fileserver, ID: 7) INFO: Client recognized in LDAP server
-(fileserver, ID: 7) DEBUG: verifying permissions for client YAHAV...
-(fileserver, ID: 7) DEBUG: Scanning for YAHAV's group membership...
-(fileserver, ID: 7) DEBUG: YAHAV is a member of the Administrators security group
-(fileserver, ID: 7) DEBUG: Initiating connection with DC for authorization...
-(DC) INFO: Connected by ('192.168.1.224', 45970)
-(DC, ID: 7) INFO: Administrators has permissions 0xf01bf. Has read access: True, has write access: True.
-(fileserver, ID: 7) DEBUG: Received message from DC: AUTHS
-(DC, ID: 7) INFO: Authentication concluded. Result: 1
-(fileserver, ID: 7) INFO: Client YAHAV is authorized.
-(fileserver, ID: 7) DEBUG: server -> YAHAV: AUTHSUCCESS
-(yahav) DEBUG: Received authorization from server
-(fileserver, ID: 7) DEBUG: server -> YAHAV: READY
-(fileserver, ID: 7) DEBUG: Searching directory: /home/fileserver/server-code/../files. Search keyword is: css
-(yahav) DEBUG: Received message from server: READY
-(yahav) DEBUG: Waiting for server search results...
-(fileserver, ID: 7) INFO: Search for keyword css successful, server returned 10 options.
-(fileserver, ID: 7) DEBUG: server -> YAHAV: OPTIONS
-(yahav) DEBUG: Received message from server: OPTIONS
-(yahav) DEBUG: Results received.
-(yahav) DEBUG: Waiting for client choice...
-(fileserver, ID: 7) CRITICAL: Server connection Failure. Exiting.
-(yahav) INFO: Connected to server: 192.168.1.224
-(fileserver, ID: 8) INFO: Connected by ('192.168.1.137', 56995)
-(fileserver, ID: 8) INFO: Client host connected: local
-(fileserver, ID: 8) INFO: _______________NEW CONNECTION: yahav; COMMAND: REQUEST css; ID: 8______________
-(fileserver, ID: 8) DEBUG: Connecting to LDAP server: ldap://yahav.yahavfileserver.home
-(fileserver, ID: 8) INFO: Successfully connected to LDAP server: ldap://yahav.yahavfileserver.home
-(fileserver, ID: 8) DEBUG: Searching for client in LDAP server...
-(fileserver, ID: 8) INFO: Client recognized in LDAP server
-(fileserver, ID: 8) DEBUG: verifying permissions for client YAHAV...
-(fileserver, ID: 8) DEBUG: Scanning for YAHAV's group membership...
-(fileserver, ID: 8) DEBUG: Initiating connection with DC for authorization...
-(fileserver, ID: 8) DEBUG: YAHAV is a member of the Administrators security group
-(DC) INFO: Connected by ('192.168.1.224', 52368)
-(DC, ID: 8) INFO: Administrators has permissions 0xf01bf. Has read access: True, has write access: True.
-(DC, ID: 8) INFO: Authentication concluded. Result: 1
-(fileserver, ID: 8) DEBUG: Received message from DC: AUTHS
-(fileserver, ID: 8) INFO: Client YAHAV is authorized.
-(yahav) DEBUG: Received authorization from server
-(fileserver, ID: 8) DEBUG: server -> YAHAV: AUTHSUCCESS
-(fileserver, ID: 8) DEBUG: server -> YAHAV: READY
-(yahav) DEBUG: Received message from server: READY
-(yahav) DEBUG: Waiting for server search results...
-(fileserver, ID: 8) DEBUG: Searching directory: /home/fileserver/server-code/../files. Search keyword is: css
-(fileserver, ID: 8) INFO: Search for keyword css successful, server returned 10 options.
-(fileserver, ID: 8) DEBUG: server -> YAHAV: OPTIONS
-(yahav) DEBUG: Received message from server: OPTIONS
-(yahav) DEBUG: Results received.
-(yahav) DEBUG: Waiting for client choice...
-(fileserver, ID: 8) CRITICAL: Server connection Failure. Exiting.
-(fileserver, ID: 9) INFO: Connected by ('192.168.1.137', 57027)
-(yahav) INFO: Connected to server: 192.168.1.224
-(fileserver, ID: 9) INFO: Client host connected: local.yahavfileserver.home
-(fileserver, ID: 9) INFO: _______________NEW CONNECTION: yahav; COMMAND: REQUEST hello; ID: 9______________
-(fileserver, ID: 9) DEBUG: Connecting to LDAP server: ldap://yahav.yahavfileserver.home
-(fileserver, ID: 9) INFO: Successfully connected to LDAP server: ldap://yahav.yahavfileserver.home
-(fileserver, ID: 9) DEBUG: Searching for client in LDAP server...
-(fileserver, ID: 9) INFO: Client recognized in LDAP server
-(fileserver, ID: 9) DEBUG: verifying permissions for client YAHAV...
-(fileserver, ID: 9) DEBUG: Scanning for YAHAV's group membership...
-(fileserver, ID: 9) DEBUG: YAHAV is a member of the Administrators security group
-(fileserver, ID: 9) DEBUG: Initiating connection with DC for authorization...
-(DC) INFO: Connected by ('192.168.1.224', 60706)
-(DC, ID: 9) INFO: Administrators has permissions 0xf01bf. Has read access: True, has write access: True.
-(DC, ID: 9) INFO: Authentication concluded. Result: 1
-(fileserver, ID: 9) DEBUG: Received message from DC: AUTHS
-(fileserver, ID: 9) DEBUG: server -> YAHAV: AUTHSUCCESS
-(fileserver, ID: 9) INFO: Client YAHAV is authorized.
-(fileserver, ID: 9) DEBUG: server -> YAHAV: READY
-(yahav) DEBUG: Received authorization from server
-(fileserver, ID: 9) DEBUG: Searching directory: /home/fileserver/server-code/../files. Search keyword is: hello
-(yahav) DEBUG: Received message from server: READY
-(yahav) DEBUG: Waiting for server search results...
-(fileserver, ID: 9) INFO: Search for keyword hello successful, server returned 10 options.
-(fileserver, ID: 9) DEBUG: server -> YAHAV: OPTIONS
-(yahav) DEBUG: Received message from server: OPTIONS
-(yahav) DEBUG: Results received.
-(yahav) INFO: Connected to server: 192.168.1.224
-(fileserver, ID: 10) INFO: Connected by ('192.168.1.137', 57035)
-(fileserver, ID: 10) INFO: Client host connected: local
-(fileserver, ID: 10) INFO: _______________NEW CONNECTION: yahav; COMMAND: REQUEST hello; ID: 10______________
-(fileserver, ID: 10) DEBUG: Connecting to LDAP server: ldap://yahav.yahavfileserver.home
-(fileserver, ID: 10) INFO: Successfully connected to LDAP server: ldap://yahav.yahavfileserver.home
-(fileserver, ID: 10) DEBUG: Searching for client in LDAP server...
-(fileserver, ID: 10) INFO: Client recognized in LDAP server
-(fileserver, ID: 10) DEBUG: verifying permissions for client YAHAV...
-(fileserver, ID: 10) DEBUG: Scanning for YAHAV's group membership...
-(fileserver, ID: 10) DEBUG: YAHAV is a member of the Administrators security group
-(fileserver, ID: 10) DEBUG: Initiating connection with DC for authorization...
-(DC) INFO: Connected by ('192.168.1.224', 35422)
-(DC, ID: 10) INFO: Administrators has permissions 0xf01bf. Has read access: True, has write access: True.
-(fileserver, ID: 10) INFO: Client YAHAV is authorized.
-(DC, ID: 10) INFO: Authentication concluded. Result: 1
-(fileserver, ID: 10) DEBUG: Received message from DC: AUTHS
-(yahav) DEBUG: Received authorization from server
-(fileserver, ID: 10) DEBUG: server -> YAHAV: AUTHSUCCESS
-(yahav) DEBUG: Received message from server: READY
-(fileserver, ID: 10) DEBUG: server -> YAHAV: READY
-(yahav) DEBUG: Waiting for server search results...
-(fileserver, ID: 10) DEBUG: Searching directory: /home/fileserver/server-code/../files. Search keyword is: hello
-(fileserver, ID: 10) INFO: Search for keyword hello successful, server returned 10 options.
-(fileserver, ID: 10) DEBUG: server -> YAHAV: OPTIONS
 (yahav) DEBUG: Received message from server: OPTIONS
 (yahav) DEBUG: Results received.
 (yahav) DEBUG: Waiting for client choice...
 (yahav) DEBUG: Client chose option #8
-(yahav) DEBUG: Is a file
-(yahav) DEBUG: Checking if result is a file or directory...
-(fileserver, ID: 10) INFO: File sent successfully
-(yahav) INFO: File received successfully
-(fileserver, ID: 11) INFO: Connected by ('192.168.1.137', 57079)
-(yahav) INFO: Connected to server: 192.168.1.224
-(fileserver, ID: 11) INFO: Client host connected: local.yahavfileserver.home
-(fileserver, ID: 11) INFO: _______________NEW CONNECTION: yahav; COMMAND: REQUEST css; ID: 11______________
-(fileserver, ID: 11) DEBUG: Connecting to LDAP server: ldap://yahav.yahavfileserver.home
-(fileserver, ID: 11) INFO: Successfully connected to LDAP server: ldap://yahav.yahavfileserver.home
-(fileserver, ID: 11) DEBUG: Searching for client in LDAP server...
-(fileserver, ID: 11) INFO: Client recognized in LDAP server
-(fileserver, ID: 11) DEBUG: verifying permissions for client YAHAV...
-(fileserver, ID: 11) DEBUG: Scanning for YAHAV's group membership...
-(fileserver, ID: 11) DEBUG: YAHAV is a member of the Administrators security group
-(fileserver, ID: 11) DEBUG: Initiating connection with DC for authorization...
-(DC) INFO: Connected by ('192.168.1.224', 48650)
-(DC, ID: 11) INFO: Administrators has permissions 0xf01bf. Has read access: True, has write access: True.
-(DC, ID: 11) INFO: Authentication concluded. Result: 1
-(fileserver, ID: 11) DEBUG: Received message from DC: AUTHS
-(fileserver, ID: 11) INFO: Client YAHAV is authorized.
-(fileserver, ID: 11) DEBUG: server -> YAHAV: AUTHSUCCESS
-(yahav) DEBUG: Received authorization from server
-(yahav) DEBUG: Received message from server: READY
-(yahav) DEBUG: Waiting for server search results...
-(fileserver, ID: 11) DEBUG: server -> YAHAV: READY
-(fileserver, ID: 11) DEBUG: Searching directory: /home/fileserver/server-code/../files. Search keyword is: css
-(fileserver, ID: 11) INFO: Search for keyword css successful, server returned 10 options.
-(fileserver, ID: 11) DEBUG: server -> YAHAV: OPTIONS
-(yahav) DEBUG: Received message from server: OPTIONS
-(yahav) DEBUG: Waiting for client choice...
-(yahav) DEBUG: Results received.
-(fileserver, ID: 12) INFO: Connected by ('192.168.1.137', 57127)
-(fileserver, ID: 12) INFO: Client host connected: local
-(yahav) INFO: Connected to server: 192.168.1.224
-(fileserver, ID: 12) DEBUG: Connecting to LDAP server: ldap://yahav.yahavfileserver.home
-(fileserver, ID: 12) INFO: _______________NEW CONNECTION: yahav; COMMAND: REQUEST yahavfileserver; ID: 12______________
-(fileserver, ID: 12) INFO: Successfully connected to LDAP server: ldap://yahav.yahavfileserver.home
-(fileserver, ID: 12) DEBUG: Searching for client in LDAP server...
-(fileserver, ID: 12) DEBUG: verifying permissions for client YAHAV...
-(fileserver, ID: 12) INFO: Client recognized in LDAP server
-(fileserver, ID: 12) DEBUG: Scanning for YAHAV's group membership...
-(fileserver, ID: 12) DEBUG: YAHAV is a member of the Administrators security group
-(fileserver, ID: 12) DEBUG: Initiating connection with DC for authorization...
-(DC) INFO: Connected by ('192.168.1.224', 35668)
-(DC, ID: 12) INFO: Administrators has permissions 0xf01bf. Has read access: True, has write access: True.
-(fileserver, ID: 12) DEBUG: Received message from DC: AUTHS
-(DC, ID: 12) INFO: Authentication concluded. Result: 1
-(fileserver, ID: 12) INFO: Client YAHAV is authorized.
-(fileserver, ID: 12) DEBUG: server -> YAHAV: AUTHSUCCESS
-(fileserver, ID: 12) DEBUG: server -> YAHAV: READY
-(fileserver, ID: 12) DEBUG: Searching directory: /home/fileserver/server-code/../files. Search keyword is: yahavfileserver
-(fileserver, ID: 12) INFO: Search for keyword yahavfileserver successful, server returned 2 options.
-(fileserver, ID: 12) DEBUG: server -> YAHAV: OPTIONS
-(yahav) DEBUG: Received authorization from server
-(yahav) DEBUG: Received message from server: READY
-(yahav) DEBUG: Waiting for server search results...
-(yahav) DEBUG: Received message from server: OPTIONS
-(yahav) DEBUG: Results received.
-(yahav) DEBUG: Waiting for client choice...
-(yahav) DEBUG: Client chose option #1
 (yahav) DEBUG: Checking if result is a file or directory...
 (yahav) DEBUG: Is a file
-(fileserver, ID: 12) INFO: Zipped directory sent successfully
+(fileserver, ID: 5) INFO: File sent successfully
 (yahav) INFO: File received successfully
-(fileserver, ID: 11) CRITICAL: Server connection Failure. Exiting.

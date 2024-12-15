@@ -260,21 +260,19 @@ class localGUI(tk.Tk):
 
     def process_prompts(self):
         while True:
-            try: 
-                prompt_type, message = self.prompt_queue.get_nowait()  # Block until message arrives
-                self.add_prompt_message(message, prompt_type)
-                tries = 0
-                while tries < 50:
+            prompt_type, message = self.prompt_queue.get()  # block until a message arrives
+            self.add_prompt_message(message, prompt_type)
+            for _ in range(50):                             # if multiple prompts arrive, try to fetch a bunch at once
+                try:
                     prompt_type, message = self.prompt_queue.get(timeout=0.02)
                     self.add_prompt_message(message, prompt_type)
-                    tries += 1
-            except queue.Empty:
-                pass
+                except queue.Empty:
+                    break                                   # exit early if no more messages
 
     def add_prompt_message(self, message, prompt_type):
         self.dev_frame.prompt_text.insert(tk.END, message + '\n')
-        if self.dev_frame.prompt_text.yview()[1] == 1.0:  # Check if we're already at the bottom
-            self.dev_frame.prompt_text.yview(tk.END)  # auto-scroll to the end
+        if self.dev_frame.prompt_text.yview()[1] == 1.0:    # Check if we're already at the bottom
+            self.dev_frame.prompt_text.yview(tk.END)        # auto-scroll to the end
 
         if prompt_type == "prompt":
             self.get_prompt_response()
@@ -307,5 +305,5 @@ class localGUI(tk.Tk):
 
 ############### TEST FRAME ##################
 
-    def launch_test_frame(test_frame): 
+    def launch_test_frame(self): 
         pass

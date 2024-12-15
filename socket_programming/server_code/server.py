@@ -206,13 +206,13 @@ def handle_store(conn, filename, client_dir, client_name, conn_counter):
         conn_counter: current connection ID (for logging)
     """
 
-    # check for overwrite
+
 
     basename = os.path.basename(filename)
     if basename == '':
         basename = os.path.basename(filename[:-1])                  # weird edge case for dirs
 
-    if os.path.exists(os.path.join(client_dir, basename)):
+    if os.path.exists(os.path.join(client_dir, basename)):          # check for overwrite
         logger.warning("Overwrite detected. Notifying client...",
                         extra={'conn_counter': conn_counter})
 
@@ -235,9 +235,7 @@ def handle_store(conn, filename, client_dir, client_name, conn_counter):
             logger.info("Client acknowledged overwrite. Continuing.",
                         extra={'conn_counter': conn_counter})
 
-    # initiate request
-
-    # indicate to client that server is ready
+    # initiate response to client
     send_server_msg(conn, 'READY', client_name, conn_counter)
 
     logger.debug("Checking if STORE request is for a file or a directory...",
@@ -342,7 +340,7 @@ def handle_request(conn, filename, client_name, conn_counter):
         # receive back client's number choice, which is index into list
         client_msg = conn.recv(BUF_SIZE_SMALL).decode('utf-8')
         options = json.loads(json_list)
-        if int(client_msg) > len(options):                          # client chose N/A option
+        if int(client_msg) > len(options) or int(client_msg) == NUM_FILES_RETURNED:                          # client chose N/A option
             logger.error("Search unsuccessful. Closing.", extra={'conn_counter': conn_counter})
         else:
             target_file = options[int(client_msg)-1]
@@ -477,7 +475,6 @@ if __name__ == "__main__":
     conn_counter = 0
 
     # connection setup
-
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_socket.bind(('0.0.0.0', port))
